@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   STORAGE_KEY,
   createBackupFileName,
@@ -14,6 +14,10 @@ beforeEach(() => {
   localStorage.clear();
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-05-17T12:00:00.000Z"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("storage", () => {
