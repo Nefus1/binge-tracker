@@ -66,13 +66,1614 @@
 <body>
   <div id="root"></div>
 
-  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script type="text/babel">
 
-  <script type="text/babel" src="tweaks-panel.jsx"></script>
-  <script type="text/babel" src="data.jsx"></script>
-  <script type="text/babel" src="parts.jsx"></script>
-  <script type="text/babel" src="app.jsx"></script>
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "palette": ["#D97757", "#29261b", "#f6f4ef"],
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        options={['#D97757', '#2A6FDB', '#1F8A5B', '#7A5AE0']}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakColor  label="Palette" value={t.palette}
+//                        options={[['#D97757', '#29261b', '#f6f4ef'],
+//                                  ['#475569', '#0f172a', '#f1f5f9']]}
+//                        onChange={(v) => setTweak('palette', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;box-sizing:border-box;min-width:0;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),
+    0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+    // Same-window signal so in-page listeners (deck-stage rail thumbnails)
+    // can react — the parent message only reaches the host, not peers.
+    window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  // Auto-inject a rail toggle when a <deck-stage> is on the page. The
+  // toggle drives the deck's per-viewer _railVisible via window message;
+  // state is mirrored from the same localStorage key the deck reads so
+  // the control reflects reality across reloads. The mechanism is the
+  // message — authors who want custom placement can post it directly
+  // and pass noDeckControls to suppress this one.
+  const hasDeckStage = React.useMemo(
+    () => typeof document !== 'undefined' && !!document.querySelector('deck-stage'),
+    [],
+  );
+  // deck-stage enables its rail in connectedCallback, but this panel can
+  // mount before that element has upgraded. The initial read catches the
+  // common case; the listener covers mounting first. (Older deck-stage.js
+  // copies still wait for the host's __omelette_rail_enabled postMessage —
+  // same listener handles those.)
+  const [railEnabled, setRailEnabled] = React.useState(
+    () => hasDeckStage && !!document.querySelector('deck-stage')?._railEnabled,
+  );
+  React.useEffect(() => {
+    if (!hasDeckStage || railEnabled) return undefined;
+    const onMsg = (e) => {
+      if (e.data && e.data.type === '__omelette_rail_enabled') setRailEnabled(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [hasDeckStage, railEnabled]);
+  const [railVisible, setRailVisible] = React.useState(() => {
+    try { return localStorage.getItem('deck-stage.railVisible') !== '0'; } catch (e) { return true; }
+  });
+  const toggleRail = (on) => {
+    setRailVisible(on);
+    window.postMessage({ type: '__deck_rail_visible', on }, '*');
+  };
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">
+          {children}
+          {hasDeckStage && railEnabled && !noDeckControls && (
+            <TweakSection label="Deck">
+              <TweakToggle label="Thumbnail rail" value={railVisible} onChange={toggleRail} />
+            </TweakSection>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  // Segments wrap mid-word once per-segment width runs out. The track is
+  // ~248px (280 panel − 28 body pad − 4 seg pad), each button loses 12px
+  // to its own padding, and 11.5px system-ui averages ~6.3px/char — so 2
+  // options fit ~16 chars each, 3 fit ~10. Past that (or >3 options), fall
+  // back to a dropdown rather than wrap.
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    // <select> emits strings — map back to the original option value so the
+    // fallback stays type-preserving (numbers, booleans) like the segment path.
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options}
+                        onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+// Relative-luminance contrast pick — checkmarks drawn over a swatch need to
+// read on both #111 and #fafafa without per-option configuration. Hex input
+// only (#rgb / #rrggbb); named or rgb()/hsl() colors fall through to "light".
+function __twkIsLight(hex) {
+  const h = String(hex).replace('#', '');
+  const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+  const n = parseInt(x.slice(0, 6), 16);
+  if (Number.isNaN(n)) return true;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return r * 299 + g * 587 + b * 114 > 148000;
+}
+
+const __TwkCheck = ({ light }) => (
+  <svg viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"
+          stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+  </svg>
+);
+
+// TweakColor — curated color/palette picker. Each option is either a single
+// hex string or an array of 1-5 hex strings; the card adapts — a lone color
+// renders solid, a palette renders colors[0] as the hero (left ~2/3) with the
+// rest stacked in a sharp column on the right. onChange emits the
+// option in the shape it was passed (string stays string, array stays array).
+// Without options it falls back to the native color input for back-compat.
+function TweakColor({ label, value, options, onChange }) {
+  if (!options || !options.length) {
+    return (
+      <div className="twk-row twk-row-h">
+        <div className="twk-lbl"><span>{label}</span></div>
+        <input type="color" className="twk-swatch" value={value}
+               onChange={(e) => onChange(e.target.value)} />
+      </div>
+    );
+  }
+  // Native <input type=color> emits lowercase hex per the HTML spec, so
+  // compare case-insensitively. String() guards JSON.stringify(undefined),
+  // which returns the primitive undefined (no .toLowerCase).
+  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const cur = key(value);
+  return (
+    <TweakRow label={label}>
+      <div className="twk-chips" role="radiogroup">
+        {options.map((o, i) => {
+          const colors = Array.isArray(o) ? o : [o];
+          const [hero, ...rest] = colors;
+          const sup = rest.slice(0, 4);
+          const on = key(o) === cur;
+          return (
+            <button key={i} type="button" className="twk-chip" role="radio"
+                    aria-checked={on} data-on={on ? '1' : '0'}
+                    aria-label={colors.join(', ')} title={colors.join(' · ')}
+                    style={{ background: hero }}
+                    onClick={() => onChange(o)}>
+              {sup.length > 0 && (
+                <span>
+                  {sup.map((c, j) => <i key={j} style={{ background: c }} />)}
+                </span>
+              )}
+              {on && <__TwkCheck light={__twkIsLight(hero)} />}
+            </button>
+          );
+        })}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+
+</script>
+<script type="text/babel">
+// Static realistic data for the binge tracker mock.
+// Two viewers, 12 weeks of history, real prestige-TV slate.
+
+const PEOPLE = {
+  M: { key: "M", name: "Maya",  short: "M", color: "var(--maya)" },
+  T: { key: "T", name: "Theo",  short: "T", color: "var(--theo)" },
+};
+
+// 12 weeks of (solo M, solo T, together) hours. Most recent week last.
+const WEEKLY = [
+  { wk: "Mar 2",  m: 1.2, t: 2.4, c: 3.5 },
+  { wk: "Mar 9",  m: 0.8, t: 1.6, c: 5.1 },
+  { wk: "Mar 16", m: 2.1, t: 1.2, c: 4.8 },
+  { wk: "Mar 23", m: 1.6, t: 2.0, c: 6.2 },
+  { wk: "Mar 30", m: 0.9, t: 3.1, c: 7.8 },
+  { wk: "Apr 6",  m: 2.4, t: 1.8, c: 5.6 },
+  { wk: "Apr 13", m: 1.7, t: 1.4, c: 9.1 },
+  { wk: "Apr 20", m: 1.1, t: 2.9, c: 8.4 },
+  { wk: "Apr 27", m: 2.6, t: 1.5, c: 6.7 },
+  { wk: "May 4",  m: 1.4, t: 2.2, c: 10.3 },
+  { wk: "May 11", m: 1.8, t: 1.6, c: 11.5 },
+  { wk: "May 18", m: 2.3, t: 2.7, c: 12.5 }, // current week
+];
+
+const CURRENT_WEEK = WEEKLY[WEEKLY.length - 1];
+
+// Currently watching — shows with progress
+const NOW_WATCHING = [
+  {
+    id: "severance",
+    title: "Severance",
+    season: 2,
+    ep: 7, total: 10,
+    runtime: 58,
+    nextAt: "Tonight · 9:40 PM",
+    mode: "together",
+    accent: "var(--together)",
+    cover: "#2b3a4a",
+    glyph: "S",
+    note: "Lumon, eight months in. We have theories."
+  },
+  {
+    id: "bear",
+    title: "The Bear",
+    season: 3,
+    ep: 4, total: 10,
+    runtime: 33,
+    nextAt: "Thu · 10:15 PM",
+    mode: "together",
+    accent: "var(--together)",
+    cover: "#3a2418",
+    glyph: "B",
+    note: "Cousin arc, eating glass."
+  },
+  {
+    id: "slow-horses",
+    title: "Slow Horses",
+    season: 4,
+    ep: 2, total: 6,
+    runtime: 47,
+    nextAt: "Last · Sat 11:33 PM",
+    mode: "T",
+    accent: "var(--theo)",
+    cover: "#2a2e1f",
+    glyph: "SH",
+    note: "Lamb is being Lamb."
+  },
+  {
+    id: "diplomat",
+    title: "The Diplomat",
+    season: 2,
+    ep: 5, total: 6,
+    runtime: 51,
+    nextAt: "Last · Sat 8:20 PM",
+    mode: "M",
+    accent: "var(--maya)",
+    cover: "#3a1f2a",
+    glyph: "D",
+    note: "Hair is doing a lot."
+  },
+];
+
+// Recent finishes
+const RECENT_FINISHES = [
+  { title: "Shōgun",                        year: 2024, eps: 10, hrs: 9.8,  rating: 9.4, mode: "together" },
+  { title: "True Detective: Night Country", year: 2024, eps: 6,  hrs: 5.6,  rating: 8.1, mode: "together" },
+  { title: "Mr. & Mrs. Smith",              year: 2024, eps: 8,  hrs: 6.4,  rating: 7.5, mode: "together" },
+  { title: "Ripley",                        year: 2024, eps: 8,  hrs: 7.7,  rating: 8.9, mode: "M" },
+  { title: "Andor",                         year: 2022, eps: 12, hrs: 10.5, rating: 9.2, mode: "T" },
+];
+
+// Top shows of all time by hours
+const LEADERBOARD = [
+  { title: "Severance",       hrs: 17.4, mode: "together", eps: 18, year: "2022–" },
+  { title: "Succession",      hrs: 29.0, mode: "together", eps: 39, year: "2018–23" },
+  { title: "The Bear",        hrs: 13.8, mode: "together", eps: 24, year: "2022–" },
+  { title: "Andor",           hrs: 10.5, mode: "T",        eps: 12, year: "2022–" },
+  { title: "Shōgun",          hrs:  9.8, mode: "together", eps: 10, year: "2024" },
+  { title: "The Last of Us",  hrs:  9.2, mode: "together", eps:  9, year: "2023–" },
+];
+
+// 12 weeks × 7 days of episode counts. 0–4. Most-recent at bottom-right.
+// Designed to show patterns: weekends heavier, the occasional Tuesday binge.
+const HEATMAP_WEEKS = 12;
+const HEATMAP = (() => {
+  // pseudo-random but stable
+  const seed = 1337;
+  const rng = (i) => {
+    const x = Math.sin(seed + i * 9301 + 49297) * 233280;
+    return x - Math.floor(x);
+  };
+  const data = [];
+  for (let w = 0; w < HEATMAP_WEEKS; w++) {
+    const row = [];
+    for (let d = 0; d < 7; d++) {
+      const r = rng(w * 7 + d);
+      // weighted: weekday lower, friday/sat higher
+      let base;
+      if (d === 5 || d === 6) base = 0.55;      // Fri/Sat
+      else if (d === 0)        base = 0.40;     // Sun
+      else if (d === 2)        base = 0.30;     // Tue (random bingeable nights)
+      else                     base = 0.18;
+      // ramp up recent weeks
+      base += w / HEATMAP_WEEKS * 0.18;
+      let v = 0;
+      if (r < base * 0.25) v = 4;
+      else if (r < base * 0.55) v = 3;
+      else if (r < base * 0.9)  v = 2;
+      else if (r < base * 1.3)  v = 1;
+      else v = 0;
+      row.push(v);
+    }
+    data.push(row);
+  }
+  return data;
+})();
+
+// Genre split (% of hours)
+const GENRES = [
+  { name: "Prestige Drama", pct: 38, hex: "var(--maya)" },
+  { name: "Thriller",       pct: 22, hex: "var(--theo)" },
+  { name: "Sci-Fi",         pct: 18, hex: "var(--together)" },
+  { name: "Comedy",          pct: 12, hex: "#9c7cd6" },
+  { name: "Documentary",     pct:  6, hex: "#7a8eaa" },
+  { name: "Animation",       pct:  4, hex: "#6b6357" },
+];
+
+// Latest episodes log
+const RECENT_LOG = [
+  { when: "Yesterday · 11:12 PM", show: "Severance",     ep: "S2 · E7",  title: "Chikhai Bardo",        runtime: 58, who: "together" },
+  { when: "Yesterday · 10:08 PM", show: "Severance",     ep: "S2 · E6",  title: "Attila",               runtime: 47, who: "together" },
+  { when: "Sun · 9:45 PM",         show: "The Bear",      ep: "S3 · E4",  title: "Violet",               runtime: 33, who: "together" },
+  { when: "Sun · 9:10 PM",         show: "The Bear",      ep: "S3 · E3",  title: "Doors",                runtime: 31, who: "together" },
+  { when: "Sat · 11:33 PM",        show: "Slow Horses",   ep: "S4 · E2",  title: "Bad Influence",        runtime: 47, who: "T" },
+  { when: "Sat · 8:20 PM",         show: "The Diplomat",  ep: "S2 · E5",  title: "Some People Did…",    runtime: 51, who: "M" },
+  { when: "Fri · 10:50 PM",        show: "Severance",     ep: "S2 · E5",  title: "Trojan's Horse",       runtime: 41, who: "together" },
+  { when: "Fri · 9:55 PM",         show: "Severance",     ep: "S2 · E4",  title: "Woe's Hollow",         runtime: 65, who: "together" },
+];
+
+// Headline stats for the strip
+const STRIP_STATS = [
+  { k: "Episodes this wk",     v: "14",       sub: "+3 vs last wk", trend: "up" },
+  { k: "Avg per sitting",      v: "2.8",      sub: "episodes",       trend: "flat" },
+  { k: "Longest session",      v: "4h 12m",   sub: "Sat May 17",     trend: "up" },
+  { k: "Co-watch share",       v: "71%",      sub: "of all hours",   trend: "up" },
+  { k: "Late-night (after 10)",v: "62%",      sub: "of episodes",    trend: "up" },
+  { k: "Avg bedtime drift",    v: "+38m",     sub: "vs target",      trend: "bad" },
+];
+
+window.BINGE = {
+  PEOPLE, WEEKLY, CURRENT_WEEK, NOW_WATCHING, RECENT_FINISHES,
+  LEADERBOARD, HEATMAP, HEATMAP_WEEKS, GENRES, RECENT_LOG, STRIP_STATS,
+};
+
+</script>
+<script type="text/babel">
+// Visual building blocks for Binge Ledger.
+// Globally available components attached to window at end.
+
+const { useMemo, useState } = React;
+
+const FILM = "var(--ink-mute)";
+
+// ---------- tiny atoms ----------
+
+function Card({ children, style, pad = 24, span, accent }) {
+  return (
+    <section
+      style={{
+        background: "var(--panel)",
+        border: "1px solid var(--line)",
+        borderRadius: "var(--rad)",
+        padding: pad,
+        position: "relative",
+        gridColumn: span ? `span ${span}` : undefined,
+        ...style,
+      }}
+    >
+      {accent && (
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0,
+          height: 2, background: accent, opacity: 0.9,
+        }} />
+      )}
+      {children}
+    </section>
+  );
+}
+
+function CardHeader({ eyebrow, title, right }) {
+  return (
+    <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18, gap: 16, flexWrap: "wrap" }}>
+      <div style={{ minWidth: 0 }}>
+        <div className="eyebrow" style={{ marginBottom: 4 }}>{eyebrow}</div>
+        <h3 className="serif" style={{
+          margin: 0, fontSize: 26, lineHeight: 1.05, fontWeight: 400,
+          letterSpacing: "-0.01em", whiteSpace: "nowrap",
+        }}>{title}</h3>
+      </div>
+      {right && <div style={{ flexShrink: 0 }}>{right}</div>}
+    </header>
+  );
+}
+
+function ModeDot({ mode, size = 8 }) {
+  const c = mode === "M" ? "var(--maya)" : mode === "T" ? "var(--theo)" : "var(--together)";
+  return <span style={{
+    display: "inline-block", width: size, height: size, borderRadius: "50%",
+    background: c, verticalAlign: "middle",
+  }} />;
+}
+
+function ModeLabel({ mode }) {
+  const base = { color: "var(--ink-dim)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", fontFamily: "var(--mono)" };
+  if (mode === "together") return <span style={{ whiteSpace: "nowrap" }}><ModeDot mode="together" /> <span style={base}>Together</span></span>;
+  if (mode === "M") return <span style={{ whiteSpace: "nowrap" }}><ModeDot mode="M" /> <span style={base}>Maya · solo</span></span>;
+  return <span style={{ whiteSpace: "nowrap" }}><ModeDot mode="T" /> <span style={base}>Theo · solo</span></span>;
+}
+
+// ---------- header ----------
+
+function TopBar({ range, setRange }) {
+  const ranges = ["7D", "4W", "3M", "YTD", "ALL"];
+  return (
+    <header style={{
+      display: "grid",
+      gridTemplateColumns: "1fr auto 1fr",
+      alignItems: "center",
+      padding: "22px 40px",
+      borderBottom: "1px solid var(--line)",
+      gap: 24,
+      background: "linear-gradient(180deg, rgba(232,98,60,0.04), transparent 60%)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <Logo />
+        <div style={{ width: 1, height: 28, background: "var(--line-2)" }} />
+        <div>
+          <div className="eyebrow">Household</div>
+          <div className="serif" style={{ fontSize: 18, fontStyle: "italic", lineHeight: 1 }}>Maya &amp; Theo</div>
+        </div>
+      </div>
+
+      <nav style={{ display: "flex", gap: 26, alignItems: "center" }}>
+        {["Overview", "Library", "Sessions", "Wrapped"].map((n, i) => (
+          <a key={n} href="#" style={{
+            color: i === 0 ? "var(--ink)" : "var(--ink-mute)",
+            textDecoration: "none",
+            fontSize: 13,
+            fontWeight: 500,
+            letterSpacing: ".02em",
+            paddingBottom: 4,
+            borderBottom: i === 0 ? "1px solid var(--ink)" : "1px solid transparent",
+          }}>{n}</a>
+        ))}
+      </nav>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 16 }}>
+        <div style={{
+          display: "flex", border: "1px solid var(--line-2)", borderRadius: 2, overflow: "hidden",
+        }}>
+          {ranges.map(r => (
+            <button key={r} onClick={() => setRange(r)} style={{
+              background: r === range ? "var(--ink)" : "transparent",
+              color: r === range ? "var(--bg)" : "var(--ink-dim)",
+              border: "none",
+              padding: "7px 12px",
+              fontSize: 11,
+              fontFamily: "var(--mono)",
+              letterSpacing: ".08em",
+              cursor: "pointer",
+            }}>{r}</button>
+          ))}
+        </div>
+        <Avatars />
+      </div>
+    </header>
+  );
+}
+
+function Logo() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <rect x="1" y="4" width="26" height="20" rx="1.5" stroke="var(--ink)" strokeWidth="1.2" />
+        <circle cx="5" cy="7" r="0.8" fill="var(--ink)" />
+        <circle cx="5" cy="11" r="0.8" fill="var(--ink)" />
+        <circle cx="5" cy="15" r="0.8" fill="var(--ink)" />
+        <circle cx="5" cy="19" r="0.8" fill="var(--ink)" />
+        <circle cx="23" cy="7" r="0.8" fill="var(--ink)" />
+        <circle cx="23" cy="11" r="0.8" fill="var(--ink)" />
+        <circle cx="23" cy="15" r="0.8" fill="var(--ink)" />
+        <circle cx="23" cy="19" r="0.8" fill="var(--ink)" />
+        <rect x="8" y="8" width="12" height="12" rx="0.5" fill="var(--maya)" opacity="0.85" />
+        <rect x="10" y="10" width="12" height="12" rx="0.5" fill="var(--theo)" opacity="0.65" />
+      </svg>
+      <div>
+        <div className="serif" style={{ fontSize: 22, fontStyle: "italic", lineHeight: 1, letterSpacing: "-0.01em" }}>
+          Binge Ledger
+        </div>
+        <div className="eyebrow" style={{ marginTop: 2 }}>est. 2023 · couch № 1</div>
+      </div>
+    </div>
+  );
+}
+
+function Avatars() {
+  return (
+    <div style={{ display: "flex" }}>
+      {[{ n: "M", c: "var(--maya)" }, { n: "T", c: "var(--theo)" }].map((p, i) => (
+        <div key={p.n} style={{
+          width: 32, height: 32, borderRadius: "50%",
+          background: p.c, color: "var(--bg)",
+          display: "grid", placeItems: "center",
+          fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 16,
+          marginLeft: i === 0 ? 0 : -8,
+          border: "2px solid var(--bg)",
+          boxShadow: "0 0 0 1px rgba(255,255,255,0.06)",
+        }}>{p.n}</div>
+      ))}
+    </div>
+  );
+}
+
+// ---------- hero ----------
+
+function Hero({ range }) {
+  const cur = BINGE.CURRENT_WEEK;
+  const total = cur.m + cur.t + cur.c;
+  // diff vs prior week
+  const prev = BINGE.WEEKLY[BINGE.WEEKLY.length - 2];
+  const prevTotal = prev.m + prev.t + prev.c;
+  const delta = total - prevTotal;
+  const deltaPct = Math.round((delta / prevTotal) * 100);
+
+  const segs = [
+    { k: "Together", v: cur.c, c: "var(--together)" },
+    { k: "Maya solo", v: cur.m, c: "var(--maya)" },
+    { k: "Theo solo", v: cur.t, c: "var(--theo)" },
+  ];
+
+  return (
+    <section style={{
+      padding: "56px 40px 48px",
+      borderBottom: "1px solid var(--line)",
+      display: "grid",
+      gridTemplateColumns: "1.1fr 1fr",
+      gap: 56,
+      alignItems: "end",
+      background: "radial-gradient(circle at 18% 60%, rgba(240, 194, 74, 0.05), transparent 55%)",
+    }}>
+      <div>
+        <div className="eyebrow" style={{ marginBottom: 18 }}>This week · May 12 – 18</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 14, marginBottom: 8 }}>
+          <div className="serif" style={{
+            fontSize: 188, lineHeight: 0.82, fontStyle: "italic",
+            letterSpacing: "-0.04em",
+            background: "linear-gradient(180deg, var(--ink) 30%, color-mix(in oklab, var(--ink) 50%, var(--together)) 100%)",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+          }}>{total.toFixed(1)}</div>
+          <div style={{ paddingBottom: 18 }}>
+            <div className="serif" style={{ fontSize: 36, fontStyle: "italic", lineHeight: 1, color: "var(--ink-dim)" }}>
+              hours
+            </div>
+            <div className="mono" style={{ fontSize: 12, color: delta >= 0 ? "var(--together)" : "var(--bad)", marginTop: 8, letterSpacing: ".05em" }}>
+              {delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(1)} h ({delta >= 0 ? "+" : ""}{deltaPct}%) vs last wk
+            </div>
+          </div>
+        </div>
+        <p className="serif" style={{
+          fontStyle: "italic", color: "var(--ink-dim)", fontSize: 19,
+          maxWidth: 520, margin: "12px 0 0", lineHeight: 1.35,
+        }}>
+          “We said one more episode at 10:14. It is now 1:48.
+          The credits are rolling on Severance for the third time tonight.”
+        </p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+        {segs.map(s => (
+          <div key={s.k} style={{
+            border: "1px solid var(--line-2)",
+            padding: "20px 18px",
+            borderRadius: 2,
+            background: "rgba(0,0,0,0.25)",
+            position: "relative",
+            overflow: "hidden",
+          }}>
+            <div style={{
+              position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: s.c,
+            }} />
+            <div className="eyebrow" style={{ marginBottom: 10 }}>{s.k}</div>
+            <div className="mono" style={{ fontSize: 32, fontWeight: 500, letterSpacing: "-0.02em" }}>
+              {s.v.toFixed(1)}
+              <span style={{ fontSize: 13, color: "var(--ink-mute)", marginLeft: 4 }}>h</span>
+            </div>
+            <div className="mono" style={{ fontSize: 10, color: "var(--ink-mute)", marginTop: 6, letterSpacing: ".06em" }}>
+              {((s.v / total) * 100).toFixed(0)}% OF WEEK
+            </div>
+            {/* mini bar */}
+            <div style={{ marginTop: 14, height: 3, background: "var(--line)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ width: `${(s.v / total) * 100}%`, height: "100%", background: s.c }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- strip stats ----------
+
+function StatStrip() {
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(6, 1fr)",
+      borderBottom: "1px solid var(--line)",
+    }}>
+      {BINGE.STRIP_STATS.map((s, i) => (
+        <div key={s.k} style={{
+          padding: "22px 26px",
+          borderRight: i < 5 ? "1px solid var(--line)" : "none",
+        }}>
+          <div className="eyebrow" style={{ marginBottom: 12 }}>{s.k}</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <div className="mono" style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.02em" }}>{s.v}</div>
+            <Trend kind={s.trend} />
+          </div>
+          <div className="mono" style={{ fontSize: 10, color: "var(--ink-mute)", marginTop: 4, letterSpacing: ".05em" }}>
+            {s.sub.toUpperCase()}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Trend({ kind }) {
+  if (kind === "up") return <span style={{ color: "var(--together)", fontSize: 11 }}>▲</span>;
+  if (kind === "bad") return <span style={{ color: "var(--bad)", fontSize: 11 }}>▲</span>;
+  return <span style={{ color: "var(--ink-mute)", fontSize: 11 }}>—</span>;
+}
+
+// ---------- weekly stacked bar chart ----------
+
+function WeeklyChart() {
+  const data = BINGE.WEEKLY;
+  const max = Math.max(...data.map(d => d.m + d.t + d.c));
+  const H = 280;
+  const W = 100; // virtual width per bar — we use flex
+
+  // Y axis ticks
+  const ticks = [0, 5, 10, 15, 20];
+
+  return (
+    <Card pad={28}>
+      <CardHeader
+        eyebrow="Weekly watch · last 12 weeks"
+        title={<>Hours, <em style={{ fontStyle: "italic", color: "var(--ink-dim)" }}>stacked by mode</em></>}
+        right={
+          <div style={{ display: "flex", gap: 18, fontSize: 11 }}>
+            <Legend swatch="var(--together)" label="Together" />
+            <Legend swatch="var(--maya)" label="Maya" />
+            <Legend swatch="var(--theo)" label="Theo" />
+          </div>
+        }
+      />
+      <div style={{ display: "grid", gridTemplateColumns: "32px 1fr", gap: 16 }}>
+        <div style={{ position: "relative", height: H }}>
+          {ticks.map(t => (
+            <div key={t} style={{
+              position: "absolute", right: 0, bottom: (t / max) * H - 6,
+              fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-mute)",
+            }}>{t}h</div>
+          ))}
+        </div>
+        <div style={{ position: "relative", height: H, borderBottom: "1px solid var(--line-2)" }}>
+          {/* gridlines */}
+          {ticks.map(t => (
+            <div key={t} style={{
+              position: "absolute", left: 0, right: 0, bottom: (t / max) * H,
+              height: 1, background: "var(--line)",
+            }} />
+          ))}
+          {/* bars */}
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", gap: 10, paddingRight: 4 }}>
+            {data.map((d, i) => {
+              const total = d.m + d.t + d.c;
+              const isLast = i === data.length - 1;
+              const cH = (d.c / max) * H;
+              const mH = (d.m / max) * H;
+              const tH = (d.t / max) * H;
+              return (
+                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 1, position: "relative" }}>
+                  {isLast && (
+                    <div style={{
+                      position: "absolute", top: -28, left: "50%", transform: "translateX(-50%)",
+                      fontFamily: "var(--mono)", fontSize: 11, color: "var(--together)",
+                      whiteSpace: "nowrap",
+                    }}>{total.toFixed(1)}h ↓</div>
+                  )}
+                  <div title={`Theo solo ${d.t}h`} style={{ height: tH, background: "var(--theo)", opacity: isLast ? 1 : 0.85 }} />
+                  <div title={`Maya solo ${d.m}h`} style={{ height: mH, background: "var(--maya)", opacity: isLast ? 1 : 0.85 }} />
+                  <div title={`Together ${d.c}h`}  style={{ height: cH, background: "var(--together)", opacity: isLast ? 1 : 0.85 }} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      {/* x labels */}
+      <div style={{ display: "grid", gridTemplateColumns: "32px 1fr", gap: 16, marginTop: 8 }}>
+        <div />
+        <div style={{ display: "flex", gap: 10, paddingRight: 4 }}>
+          {data.map((d, i) => (
+            <div key={i} style={{
+              flex: 1, textAlign: "center",
+              fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-mute)",
+              letterSpacing: ".02em",
+            }}>{d.wk}</div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Legend({ swatch, label }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--ink-dim)" }}>
+      <span style={{ width: 10, height: 10, background: swatch, display: "inline-block" }} />
+      <span style={{ letterSpacing: ".06em", textTransform: "uppercase", fontSize: 10, fontFamily: "var(--mono)" }}>{label}</span>
+    </span>
+  );
+}
+
+// ---------- now watching ----------
+
+function NowWatching() {
+  return (
+    <Card pad={28}>
+      <CardHeader
+        eyebrow="On the queue · 4 active"
+        title={<>Now watching</>}
+        right={<a href="#" style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-dim)", textDecoration: "none", letterSpacing: ".08em" }}>VIEW ALL →</a>}
+      />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
+        {BINGE.NOW_WATCHING.map(s => <ShowCard key={s.id} s={s} />)}
+      </div>
+    </Card>
+  );
+}
+
+function ShowCard({ s }) {
+  const pct = (s.ep / s.total) * 100;
+  return (
+    <div style={{
+      border: "1px solid var(--line)",
+      background: "var(--panel-2)",
+      padding: 18,
+      borderRadius: 2,
+      display: "flex",
+      gap: 16,
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        width: 64, height: 92, flexShrink: 0,
+        background: `linear-gradient(155deg, ${s.cover}, color-mix(in oklab, ${s.cover}, black 40%))`,
+        border: "1px solid var(--line-2)",
+        position: "relative",
+        display: "grid", placeItems: "center",
+      }}>
+        <span className="serif" style={{ fontStyle: "italic", fontSize: 28, color: "rgba(255,255,255,0.8)" }}>{s.glyph}</span>
+        <div style={{
+          position: "absolute", top: 6, right: 6,
+          fontFamily: "var(--mono)", fontSize: 9, color: "rgba(255,255,255,0.5)",
+          letterSpacing: ".08em",
+        }}>S{s.season}</div>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h4 className="serif" title={s.title} style={{
+          margin: 0, fontSize: 21, fontWeight: 400, letterSpacing: "-0.01em", lineHeight: 1.1,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>
+          {s.title}
+        </h4>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 8 }}>
+          <ModeLabel mode={s.mode} />
+          <span className="mono" style={{ fontSize: 10, color: "var(--ink-mute)", whiteSpace: "nowrap" }}>S{s.season}·E{s.ep}/{s.total}</span>
+        </div>
+        <div style={{ marginTop: 14, height: 4, background: "var(--line)", borderRadius: 2, position: "relative" }}>
+          <div style={{ position: "absolute", inset: 0, width: `${pct}%`, background: s.accent }} />
+          {/* episode pips */}
+          <div style={{
+            position: "absolute", inset: 0, display: "flex", justifyContent: "space-between",
+            paddingTop: -2,
+          }}>
+            {Array.from({ length: s.total - 1 }).map((_, i) => (
+              <div key={i} style={{
+                width: 1, height: 4, background: "var(--bg)",
+                marginLeft: i === 0 ? `${100 / s.total}%` : 0,
+                visibility: "hidden", /* using flex instead */
+              }} />
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+          <span className="mono" style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: ".06em" }}>
+            {s.nextAt.toUpperCase()}
+          </span>
+          <span className="mono" style={{ fontSize: 10, color: "var(--ink-mute)" }}>
+            ~{(s.runtime * (s.total - s.ep))}m left
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- co-watch ring ----------
+
+function CoWatchRing() {
+  const cur = BINGE.CURRENT_WEEK;
+  const total = cur.m + cur.t + cur.c;
+  const segs = [
+    { k: "together", v: cur.c, c: "var(--together)" },
+    { k: "M", v: cur.m, c: "var(--maya)" },
+    { k: "T", v: cur.t, c: "var(--theo)" },
+  ];
+  const R = 80, C = 2 * Math.PI * R;
+  let acc = 0;
+
+  return (
+    <Card pad={28}>
+      <CardHeader eyebrow="Time together" title={<>Co-watch ratio</>} />
+      <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+        <svg width="190" height="190" viewBox="0 0 200 200" style={{ flexShrink: 0 }}>
+          <circle cx="100" cy="100" r={R} fill="none" stroke="var(--line)" strokeWidth="22" />
+          {segs.map((s, i) => {
+            const frac = s.v / total;
+            const len = frac * C;
+            const offset = -acc * C;
+            acc += frac;
+            return (
+              <circle key={s.k}
+                cx="100" cy="100" r={R} fill="none"
+                stroke={s.c} strokeWidth="22"
+                strokeDasharray={`${len} ${C - len}`}
+                strokeDashoffset={offset}
+                transform="rotate(-90 100 100)"
+              />
+            );
+          })}
+          <text x="100" y="98" textAnchor="middle"
+            style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 44, fill: "var(--ink)" }}>
+            {Math.round((cur.c / total) * 100)}%
+          </text>
+          <text x="100" y="118" textAnchor="middle"
+            style={{ fontFamily: "var(--mono)", fontSize: 9, fill: "var(--ink-mute)", letterSpacing: "0.12em" }}>
+            TOGETHER
+          </text>
+        </svg>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
+          {segs.map(s => (
+            <div key={s.k} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+              <span><ModeDot mode={s.k === "together" ? "together" : s.k} /> <span style={{ fontSize: 12, color: "var(--ink-dim)", marginLeft: 6, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: "var(--mono)" }}>
+                {s.k === "together" ? "Together" : s.k === "M" ? "Maya solo" : "Theo solo"}
+              </span></span>
+              <span className="mono" style={{ fontSize: 13, fontWeight: 500 }}>
+                {s.v.toFixed(1)}h <span style={{ color: "var(--ink-mute)", fontSize: 10 }}>· {Math.round((s.v / total) * 100)}%</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ---------- genre stacked bar ----------
+
+function GenreCard() {
+  return (
+    <Card pad={28}>
+      <CardHeader eyebrow="Quarterly mix" title={<>Genre <em style={{ fontStyle: "italic", color: "var(--ink-dim)" }}>diet</em></>} />
+      <div style={{
+        display: "flex", height: 14, marginBottom: 18,
+        border: "1px solid var(--line-2)",
+      }}>
+        {BINGE.GENRES.map(g => (
+          <div key={g.name} title={`${g.name} · ${g.pct}%`} style={{
+            width: `${g.pct}%`, background: g.hex,
+          }} />
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        {BINGE.GENRES.map(g => (
+          <div key={g.name} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-dim)", fontSize: 12 }}>
+              <span style={{ width: 8, height: 8, background: g.hex, display: "inline-block" }} />
+              {g.name}
+            </span>
+            <span className="mono" style={{ fontSize: 11, color: "var(--ink)" }}>{g.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---------- heatmap ----------
+
+function HeatmapCard() {
+  const data = BINGE.HEATMAP;
+  const dayLabels = ["S", "M", "T", "W", "T", "F", "S"];
+
+  const palette = [
+    "rgba(244, 237, 226, 0.06)",
+    "rgba(240, 194, 74, 0.32)",
+    "rgba(240, 194, 74, 0.58)",
+    "rgba(240, 194, 74, 0.82)",
+    "rgba(240, 194, 74, 1.00)",
+  ];
+
+  return (
+    <Card pad={28}>
+      <CardHeader
+        eyebrow="Episode calendar · 12 weeks × 7 days"
+        title={<>Every night a <em style={{ fontStyle: "italic", color: "var(--ink-dim)" }}>session</em></>}
+        right={
+          <div style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 10, color: "var(--ink-mute)", fontFamily: "var(--mono)", letterSpacing: ".06em" }}>
+            FEWER
+            {palette.map((p, i) => <span key={i} style={{ width: 12, height: 12, background: p, border: "1px solid var(--line)" }} />)}
+            MORE
+          </div>
+        }
+      />
+      <div style={{ display: "grid", gridTemplateColumns: "24px 1fr", gap: 6, alignItems: "start" }}>
+        <div style={{ display: "grid", gridTemplateRows: "repeat(7, 1fr)", gap: 4, marginTop: 0 }}>
+          {dayLabels.map((d, i) => (
+            <div key={i} style={{
+              fontFamily: "var(--mono)", fontSize: 9, color: "var(--ink-mute)",
+              textAlign: "right", paddingRight: 4, height: 22, display: "flex", alignItems: "center", justifyContent: "flex-end",
+            }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${data.length}, 1fr)`, gap: 4 }}>
+          {data.map((week, wi) => (
+            <div key={wi} style={{ display: "grid", gridTemplateRows: "repeat(7, 1fr)", gap: 4 }}>
+              {week.map((v, di) => (
+                <div key={di} title={`${v} episode${v === 1 ? "" : "s"}`} style={{
+                  height: 22, background: palette[v],
+                  border: "1px solid var(--line)",
+                  borderRadius: 1,
+                }} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{
+        display: "grid", gridTemplateColumns: "24px 1fr", gap: 6, marginTop: 8,
+      }}>
+        <div />
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${data.length}, 1fr)`, gap: 4 }}>
+          {BINGE.WEEKLY.map((w, i) => (
+            <div key={i} style={{
+              fontFamily: "var(--mono)", fontSize: 9, color: "var(--ink-mute)",
+              textAlign: "center", letterSpacing: ".02em",
+            }}>{w.wk.split(" ")[1]}</div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ---------- leaderboard ----------
+
+function Leaderboard() {
+  const max = Math.max(...BINGE.LEADERBOARD.map(x => x.hrs));
+  return (
+    <Card pad={28}>
+      <CardHeader eyebrow="All-time" title={<>Most-watched <em style={{ fontStyle: "italic", color: "var(--ink-dim)" }}>shows</em></>} />
+      <div>
+        {BINGE.LEADERBOARD.map((s, i) => (
+          <div key={s.title} style={{
+            display: "grid", gridTemplateColumns: "22px 1fr auto",
+            gap: 14, alignItems: "center",
+            padding: "12px 0", borderBottom: i < BINGE.LEADERBOARD.length - 1 ? "1px solid var(--line)" : "none",
+          }}>
+            <span className="mono" style={{ fontSize: 11, color: "var(--ink-mute)" }}>0{i + 1}</span>
+            <div style={{ minWidth: 0 }}>
+              <div className="serif" style={{
+                fontSize: 18, fontStyle: "italic", lineHeight: 1.1, marginBottom: 4,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>{s.title}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1, height: 3, background: "var(--line)", position: "relative", minWidth: 0 }}>
+                  <div style={{
+                    height: "100%", width: `${(s.hrs / max) * 100}%`,
+                    background: s.mode === "together" ? "var(--together)" : s.mode === "M" ? "var(--maya)" : "var(--theo)",
+                  }} />
+                </div>
+                <span className="mono" style={{ fontSize: 10, color: "var(--ink-mute)", whiteSpace: "nowrap" }}>{s.year} · {s.eps} ep</span>
+              </div>
+            </div>
+            <span className="mono" style={{ fontSize: 15, textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>{s.hrs.toFixed(1)}h</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---------- recent log ----------
+
+function RecentLog() {
+  return (
+    <Card pad={28}>
+      <CardHeader
+        eyebrow="Session log · last 48 hours"
+        title={<>The <em style={{ fontStyle: "italic", color: "var(--ink-dim)" }}>tape</em></>}
+        right={<a href="#" style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-dim)", textDecoration: "none", letterSpacing: ".08em" }}>EXPORT CSV ↗</a>}
+      />
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--line-2)" }}>
+            {["When", "Show", "Episode", "Title", "Runtime", "Watched"].map(h => (
+              <th key={h} className="mono" style={{
+                textAlign: h === "Runtime" ? "right" : "left",
+                fontWeight: 400, fontSize: 10, color: "var(--ink-mute)",
+                letterSpacing: ".1em", padding: "10px 0",
+                textTransform: "uppercase",
+              }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {BINGE.RECENT_LOG.map((r, i) => (
+            <tr key={i} style={{ borderBottom: "1px solid var(--line)" }}>
+              <td className="mono" style={{ fontSize: 12, color: "var(--ink-dim)", padding: "12px 0" }}>{r.when}</td>
+              <td className="serif" style={{ fontSize: 17, fontStyle: "italic", padding: "12px 12px 12px 0" }}>{r.show}</td>
+              <td className="mono" style={{ fontSize: 11, color: "var(--ink-dim)", padding: "12px 12px 12px 0" }}>{r.ep}</td>
+              <td style={{ fontSize: 13, color: "var(--ink)", padding: "12px 12px 12px 0" }}>{r.title}</td>
+              <td className="mono" style={{ fontSize: 12, color: "var(--ink-dim)", textAlign: "right", padding: "12px 0" }}>{r.runtime}m</td>
+              <td style={{ padding: "12px 0 12px 16px" }}><ModeLabel mode={r.who} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+// ---------- footer ----------
+
+function Footer() {
+  return (
+    <footer style={{
+      padding: "40px 40px 56px",
+      borderTop: "1px solid var(--line)",
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      color: "var(--ink-mute)", fontSize: 11, fontFamily: "var(--mono)", letterSpacing: ".06em",
+      textTransform: "uppercase",
+    }}>
+      <span>Binge Ledger · synced from Plex, Netflix, Max, AppleTV+ · last 14s ago</span>
+      <span>v 1.4.0 · couch № 1, blanket № 2</span>
+    </footer>
+  );
+}
+
+Object.assign(window, {
+  Card, CardHeader, TopBar, Hero, StatStrip,
+  WeeklyChart, NowWatching, CoWatchRing, GenreCard,
+  HeatmapCard, Leaderboard, RecentLog, Footer,
+  ModeDot, ModeLabel,
+});
+
+</script>
+<script type="text/babel">
+// Binge Ledger — main app
+const { useState, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "mayaColor": "#e8623c",
+  "theoColor": "#4ec9b0",
+  "togetherColor": "#f0c24a",
+  "grain": true,
+  "density": "cozy"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [range, setRange] = useState("7D");
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  // apply tweaks to css vars
+  useEffect(() => {
+    const r = document.documentElement.style;
+    r.setProperty("--maya", t.mayaColor);
+    r.setProperty("--theo", t.theoColor);
+    r.setProperty("--together", t.togetherColor);
+    document.body.style.setProperty("--grain-opacity", t.grain ? "0.5" : "0");
+    // toggle grain via body class
+    if (t.grain) document.body.classList.remove("no-grain");
+    else document.body.classList.add("no-grain");
+  }, [t.mayaColor, t.theoColor, t.togetherColor, t.grain]);
+
+  const pad = t.density === "compact" ? "0 32px" : "0 40px";
+
+  return (
+    <div data-screen-label="01 Dashboard" style={{ maxWidth: 1480, margin: "0 auto" }}>
+      <TopBar range={range} setRange={setRange} />
+      <Hero range={range} />
+      <StatStrip />
+
+      <div style={{ padding: "32px 40px", display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 24 }}>
+        <WeeklyChart />
+        <CoWatchRing />
+
+        <NowWatching />
+        <GenreCard />
+
+        <div style={{ gridColumn: "1 / -1" }}>
+          <HeatmapCard />
+        </div>
+
+        <Leaderboard />
+        <Card pad={28}>
+          <CardHeader eyebrow="Recently finished · 2024–25" title={<>Closed <em style={{ fontStyle: "italic", color: "var(--ink-dim)" }}>cases</em></>} />
+          <div>
+            {BINGE.RECENT_FINISHES.map((s, i) => (
+              <div key={s.title} style={{
+                display: "grid", gridTemplateColumns: "1fr 60px 50px",
+                alignItems: "baseline", padding: "14px 0",
+                borderBottom: i < BINGE.RECENT_FINISHES.length - 1 ? "1px solid var(--line)" : "none",
+                gap: 12,
+              }}>
+                <div>
+                  <div className="serif" style={{ fontSize: 18, fontStyle: "italic" }}>{s.title}</div>
+                  <div style={{ display: "flex", gap: 10, marginTop: 4, alignItems: "center" }}>
+                    <ModeLabel mode={s.mode} />
+                    <span className="mono" style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: ".06em" }}>
+                      · {s.eps} EP · {s.year}
+                    </span>
+                  </div>
+                </div>
+                <div className="mono" style={{ fontSize: 13, color: "var(--ink-dim)", textAlign: "right" }}>{s.hrs.toFixed(1)}h</div>
+                <div style={{ textAlign: "right" }}>
+                  <span className="mono" style={{
+                    fontSize: 11, color: "var(--together)",
+                    border: "1px solid var(--together)",
+                    padding: "2px 6px", letterSpacing: ".06em",
+                  }}>★ {s.rating}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div style={{ gridColumn: "1 / -1" }}>
+          <RecentLog />
+        </div>
+      </div>
+
+      <Footer />
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Accent colors">
+          <TweakColor
+            label="Maya"
+            value={t.mayaColor}
+            onChange={v => setTweak("mayaColor", v)}
+            options={["#e8623c", "#d04848", "#e4a04a", "#c87aa8", "#7ab9d4"]}
+          />
+          <TweakColor
+            label="Theo"
+            value={t.theoColor}
+            onChange={v => setTweak("theoColor", v)}
+            options={["#4ec9b0", "#7aa86e", "#5a9ed9", "#9c7cd6", "#d4b35a"]}
+          />
+          <TweakColor
+            label="Together (gold)"
+            value={t.togetherColor}
+            onChange={v => setTweak("togetherColor", v)}
+            options={["#f0c24a", "#e8623c", "#f4ede2", "#c8a868", "#a07cd6"]}
+          />
+        </TweakSection>
+        <TweakSection label="Surface">
+          <TweakToggle
+            label="Film grain"
+            value={t.grain}
+            onChange={v => setTweak("grain", v)}
+          />
+          <TweakRadio
+            label="Density"
+            value={t.density}
+            options={["cozy", "compact"]}
+            onChange={v => setTweak("density", v)}
+          />
+        </TweakSection>
+      </TweaksPanel>
+
+      <style>{`
+        body.no-grain::before { display: none !important; }
+      `}</style>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+</script>
 </body>
 </html>
