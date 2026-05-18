@@ -381,6 +381,74 @@ textarea:focus {
   background: linear-gradient(180deg, var(--together), var(--maya));
 }
 
+.analysis-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.analysis-controls label {
+  display: grid;
+  gap: 6px;
+}
+
+.analysis-controls span {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.analysis-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.analysis-summary > div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+}
+
+.analysis-summary strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+}
+
+.analysis-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.analysis-bar-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.analysis-bar-track {
+  height: 10px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.analysis-bar-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--maya), var(--together));
+}
+
 .stack-list {
   display: grid;
   gap: 12px;
@@ -658,6 +726,10 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .analysis-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .form-grid,
   .settings-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -686,10 +758,16 @@ textarea:focus {
   .content-grid,
   .form-grid,
   .settings-form,
+  .analysis-controls,
   .show-row-card,
   .paste-import,
   .tmdb-result {
     grid-template-columns: 1fr;
+  }
+
+  .analysis-bar-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
   .bar-chart {

@@ -7,6 +7,7 @@ The production app is a Vite React single-page app. It stores data in the browse
 ## Features
 
 - Dashboard metrics generated from real local sessions
+- Dashboard analysis filters for one show across daily, weekly, or monthly streaming hours
 - Library management for active, completed, and archived shows
 - Session logging by viewer: Tav, Dee, or Together
 - CSV export for the filtered session log
@@ -47,6 +48,10 @@ The importer reads Tautulli `get_history`, creates missing shows, logs sessions,
 Open **Settings -> TMDB enrichment** and enter a TMDB v3 API key or Read Access Token. The app searches each local Library item by title and year, detects TV vs movie records, then adds TMDB metadata and poster URLs. TMDB enrichment does not create sessions; use Tautulli import for watch history.
 
 You can also add new TV shows directly from TMDB in **Library -> Search TMDB**. Search by title, choose a result, and the app creates the show with TMDB poster art, overview, genre, runtime, total episode count, and season metadata.
+
+## Show Analysis
+
+Use **Dashboard -> Show analysis** to filter streaming hours to one show or all shows. Switch grouping between day, week, and month to see viewing patterns for a title such as *The Handmaid's Tale* after it has sessions logged.
 
 ## Legacy Prototype
 

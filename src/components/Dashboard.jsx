@@ -1,9 +1,17 @@
 import { Clock, PlusCircle } from "lucide-react";
-import { formatHours } from "../metrics.js";
+import { useMemo, useState } from "react";
+import { calculateShowAnalysis, formatHours } from "../metrics.js";
 import { Card, SectionHeader, ViewerBadge } from "./ui.jsx";
 
 export function Dashboard({ data, metrics, onViewChange }) {
   const maxBar = Math.max(...metrics.weeklyBars.map((bar) => bar.hours), 1);
+  const [analysisShowId, setAnalysisShowId] = useState("all");
+  const [analysisGroupBy, setAnalysisGroupBy] = useState("day");
+  const analysis = useMemo(
+    () => calculateShowAnalysis(data, { showId: analysisShowId, groupBy: analysisGroupBy }),
+    [analysisGroupBy, analysisShowId, data],
+  );
+  const maxAnalysisBar = Math.max(...analysis.buckets.map((bucket) => bucket.hours), 1);
 
   return (
     <div className="view dashboard-view">
@@ -44,6 +52,75 @@ export function Dashboard({ data, metrics, onViewChange }) {
       </section>
 
       <section className="content-grid">
+        <Card className="wide">
+          <SectionHeader title="Show analysis" eyebrow="Filter streaming hours" />
+          <div className="analysis-controls">
+            <label>
+              <span>Show</span>
+              <select
+                aria-label="Analysis show"
+                value={analysisShowId}
+                onChange={(event) => setAnalysisShowId(event.target.value)}
+              >
+                <option value="all">All shows</option>
+                {data.shows
+                  .slice()
+                  .sort((a, b) => a.title.localeCompare(b.title))
+                  .map((show) => (
+                    <option key={show.id} value={show.id}>
+                      {show.title}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              <span>Group by</span>
+              <select
+                aria-label="Analysis grouping"
+                value={analysisGroupBy}
+                onChange={(event) => setAnalysisGroupBy(event.target.value)}
+              >
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+              </select>
+            </label>
+          </div>
+          <div className="analysis-summary" aria-label="Filtered streaming analysis">
+            <div>
+              <p className="metric-label">Selected show</p>
+              <strong>{analysis.selectedShowTitle}</strong>
+            </div>
+            <div>
+              <p className="metric-label">Total hours</p>
+              <strong>{formatHours(analysis.totalHours)}</strong>
+            </div>
+            <div>
+              <p className="metric-label">Sessions</p>
+              <strong>{analysis.sessionCount}</strong>
+            </div>
+            <div>
+              <p className="metric-label">Average per {analysis.groupBy}</p>
+              <strong>{formatHours(analysis.averageHours)}</strong>
+            </div>
+          </div>
+          {analysis.buckets.length ? (
+            <div className="analysis-bars">
+              {analysis.buckets.map((bucket) => (
+                <div key={bucket.key} className="analysis-bar-row">
+                  <span>{bucket.label}</span>
+                  <div className="analysis-bar-track">
+                    <i style={{ width: `${Math.max(4, (bucket.hours / maxAnalysisBar) * 100)}%` }} />
+                  </div>
+                  <strong>{formatHours(bucket.hours)}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="settings-note">No sessions match this show filter yet.</p>
+          )}
+        </Card>
+
         <Card className="wide">
           <SectionHeader title="Weekly rhythm" eyebrow="Last 8 days" />
           <div className="bar-chart">

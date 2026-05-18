@@ -14,6 +14,83 @@ export function getViewerLabel(settings, viewer) {
   return settings.people.find((person) => person.id === viewer)?.name ?? viewer;
 }
 
+function getWeekStart(date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  next.setDate(next.getDate() - next.getDay());
+  return next;
+}
+
+function getBucketKey(date, groupBy) {
+  if (groupBy === "month") {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }
+  if (groupBy === "week") {
+    const start = getWeekStart(date);
+    return start.toISOString().slice(0, 10);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function formatBucketLabel(key, groupBy) {
+  if (groupBy === "month") {
+    const [year, month] = key.split("-").map(Number);
+    return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+      month: "short",
+      year: "numeric",
+    });
+  }
+  if (groupBy === "week") {
+    return `Week of ${new Date(`${key}T12:00:00`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    })}`;
+  }
+  return new Date(`${key}T12:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function calculateShowAnalysis(data, options = {}) {
+  const groupBy = options.groupBy ?? "day";
+  const showId = options.showId ?? "all";
+  const selectedShow = data.shows.find((show) => show.id === showId);
+  const filteredSessions = data.sessions
+    .filter((session) => showId === "all" || session.showId === showId)
+    .sort((a, b) => new Date(a.watchedAt).getTime() - new Date(b.watchedAt).getTime());
+  const bucketsByKey = new Map();
+  const viewerHours = { maya: 0, theo: 0, together: 0 };
+
+  for (const session of filteredSessions) {
+    const watchedAt = new Date(session.watchedAt);
+    const key = getBucketKey(watchedAt, groupBy);
+    const hours = (Number(session.runtimeMinutes) || 0) / 60;
+    bucketsByKey.set(key, (bucketsByKey.get(key) ?? 0) + hours);
+    viewerHours[session.viewer] = (viewerHours[session.viewer] ?? 0) + hours;
+  }
+
+  const buckets = [...bucketsByKey.entries()]
+    .map(([key, hours]) => ({
+      key,
+      label: formatBucketLabel(key, groupBy),
+      hours,
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  const totalHours = buckets.reduce((sum, bucket) => sum + bucket.hours, 0);
+
+  return {
+    groupBy,
+    showId,
+    selectedShowTitle: selectedShow?.title ?? "All shows",
+    buckets,
+    totalHours,
+    sessionCount: filteredSessions.length,
+    averageHours: buckets.length ? totalHours / buckets.length : 0,
+    viewerHours,
+  };
+}
+
 export function calculateDashboardMetrics(data, options = {}) {
   const now = options.now ?? new Date();
   const showsById = new Map(data.shows.map((show) => [show.id, show]));

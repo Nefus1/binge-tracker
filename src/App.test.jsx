@@ -24,6 +24,20 @@ it("renders dashboard metrics from local data", () => {
   expect(screen.getAllByText(/Severance/i).length).toBeGreaterThan(0);
 });
 
+it("filters dashboard analysis by show and time grouping", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  expect(screen.getByRole("heading", { name: /show analysis/i })).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText(/analysis show/i), "severance");
+  await user.selectOptions(screen.getByLabelText(/analysis grouping/i), "week");
+
+  const analysis = screen.getByLabelText(/filtered streaming analysis/i);
+  expect(analysis).toHaveTextContent("Severance");
+  expect(analysis).toHaveTextContent("Sessions");
+  expect(screen.getByText(/week of/i)).toBeInTheDocument();
+});
+
 it("adds a show from the library and persists it", async () => {
   const user = userEvent.setup();
   render(<App />);
