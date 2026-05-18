@@ -1,4 +1,4 @@
-import { Download, RotateCcw, Trash2, Upload } from "lucide-react";
+import { Download, RotateCcw, ServerCog, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import {
   clearStoredData,
@@ -7,11 +7,28 @@ import {
   importData,
   resetToSampleData,
 } from "../storage.js";
+import {
+  fetchTautulliHistory,
+  mergeTautulliHistory,
+  parseTautulliPayload,
+  parseUserMap,
+} from "../tautulli.js";
 import { Card, Field, SectionHeader } from "./ui.jsx";
 
 export function Settings({ data, onUpdateSettings, onReplaceData }) {
   const [settings, setSettings] = useState(data.settings);
   const [importError, setImportError] = useState("");
+  const [tautulli, setTautulli] = useState({
+    baseUrl: localStorage.getItem("binge-tracker:tautulli:url") ?? "",
+    apiKey: localStorage.getItem("binge-tracker:tautulli:key") ?? "",
+    length: 500,
+    tavUsers: "",
+    deeUsers: "",
+    togetherUsers: "",
+    pastedJson: "",
+  });
+  const [tautulliStatus, setTautulliStatus] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
 
   function updatePerson(personId, patch) {
     setSettings((current) => ({
@@ -46,6 +63,57 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
     onReplaceData(result.data, "Backup imported.");
   }
 
+  function updateTautulli(name, value) {
+    setTautulli((current) => ({ ...current, [name]: value }));
+  }
+
+  function importRows(rows) {
+    const userMap = parseUserMap({
+      maya: tautulli.tavUsers,
+      theo: tautulli.deeUsers,
+      together: tautulli.togetherUsers,
+    });
+    const result = mergeTautulliHistory(data, rows, { userMap });
+    onReplaceData(
+      result.data,
+      `Tautulli import: ${result.importedSessions} sessions, ${result.createdShows} shows.`,
+    );
+    setTautulliStatus(
+      `Imported ${result.importedSessions} sessions, created ${result.createdShows} shows, skipped ${result.skippedRows} rows.`,
+    );
+  }
+
+  async function importFromTautulli(event) {
+    event.preventDefault();
+    setIsImporting(true);
+    setTautulliStatus("");
+    try {
+      localStorage.setItem("binge-tracker:tautulli:url", tautulli.baseUrl);
+      localStorage.setItem("binge-tracker:tautulli:key", tautulli.apiKey);
+      const rows = await fetchTautulliHistory({
+        baseUrl: tautulli.baseUrl,
+        apiKey: tautulli.apiKey,
+        length: tautulli.length,
+      });
+      importRows(rows);
+    } catch (error) {
+      setTautulliStatus(
+        `${error.message} If your browser blocks the request, open the generated Tautulli API URL separately and paste the JSON response below.`,
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  function importPastedTautulliJson() {
+    try {
+      importRows(parseTautulliPayload(tautulli.pastedJson));
+      updateTautulli("pastedJson", "");
+    } catch {
+      setTautulliStatus("Could not read the pasted Tautulli JSON.");
+    }
+  }
+
   return (
     <div className="view settings-view">
       <Card>
@@ -77,6 +145,77 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
             Save settings
           </button>
         </form>
+      </Card>
+
+      <Card>
+        <SectionHeader title="Tautulli import" eyebrow="Plex watch history" />
+        <form className="settings-form" onSubmit={importFromTautulli}>
+          <Field label="Tautulli URL">
+            <input
+              value={tautulli.baseUrl}
+              onChange={(event) => updateTautulli("baseUrl", event.target.value)}
+              placeholder="http://192.168.1.20:8181"
+              type="url"
+            />
+          </Field>
+          <Field label="API key">
+            <input
+              value={tautulli.apiKey}
+              onChange={(event) => updateTautulli("apiKey", event.target.value)}
+              placeholder="Settings -> Access Control"
+              type="password"
+            />
+          </Field>
+          <Field label="Rows">
+            <input
+              value={tautulli.length}
+              onChange={(event) => updateTautulli("length", event.target.value)}
+              min="1"
+              type="number"
+            />
+          </Field>
+          <Field label="Tav users">
+            <input
+              value={tautulli.tavUsers}
+              onChange={(event) => updateTautulli("tavUsers", event.target.value)}
+              placeholder="Plex usernames, comma-separated"
+            />
+          </Field>
+          <Field label="Dee users">
+            <input
+              value={tautulli.deeUsers}
+              onChange={(event) => updateTautulli("deeUsers", event.target.value)}
+              placeholder="Plex usernames, comma-separated"
+            />
+          </Field>
+          <Field label="Together users">
+            <input
+              value={tautulli.togetherUsers}
+              onChange={(event) => updateTautulli("togetherUsers", event.target.value)}
+              placeholder="Shared Plex user, comma-separated"
+            />
+          </Field>
+          <button className="primary-btn form-submit" type="submit" disabled={isImporting}>
+            <ServerCog size={18} aria-hidden="true" />
+            {isImporting ? "Importing..." : "Import Tautulli"}
+          </button>
+        </form>
+        <div className="paste-import">
+          <Field label="Paste Tautulli JSON response">
+            <textarea
+              value={tautulli.pastedJson}
+              onChange={(event) => updateTautulli("pastedJson", event.target.value)}
+              placeholder='{"response":{"result":"success","data":{"data":[...]}}}'
+            />
+          </Field>
+          <button className="ghost-btn" type="button" onClick={importPastedTautulliJson}>
+            Import pasted JSON
+          </button>
+        </div>
+        {tautulliStatus && <p className="settings-note">{tautulliStatus}</p>}
+        <p className="settings-note">
+          Unmapped Tautulli users import as Together. Repeat imports are deduped by Tautulli history row.
+        </p>
       </Card>
 
       <Card>

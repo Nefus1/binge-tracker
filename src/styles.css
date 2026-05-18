@@ -57,19 +57,31 @@ button:disabled {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
-  min-height: 42px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #11120f;
   color: var(--text);
-  padding: 0 12px;
   outline: none;
 }
 
+input,
+select {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+textarea {
+  min-height: 108px;
+  resize: vertical;
+  padding: 12px;
+}
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--together);
   box-shadow: 0 0 0 3px rgba(240, 194, 74, 0.12);
 }
@@ -538,6 +550,14 @@ select:focus {
   margin-top: 14px;
 }
 
+.paste-import {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin-top: 14px;
+}
+
 .library-actions button,
 .ghost-btn,
 .danger-btn,
@@ -635,7 +655,8 @@ select:focus {
   .content-grid,
   .form-grid,
   .settings-form,
-  .show-row-card {
+  .show-row-card,
+  .paste-import {
     grid-template-columns: 1fr;
   }
 

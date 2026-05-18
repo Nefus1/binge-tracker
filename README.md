@@ -10,6 +10,7 @@ The production app is a Vite React single-page app. It stores data in the browse
 - Library management for active, completed, and archived shows
 - Session logging by viewer: Tav, Dee, or Together
 - CSV export for the filtered session log
+- Tautulli watch-history import with Tav/Dee/Together user mapping
 - JSON import/export, reset-to-sample, and clear-data controls
 - Household names, colors, and density settings
 - Responsive desktop and mobile layouts
@@ -28,6 +29,17 @@ The dev server runs at `http://127.0.0.1:5173/` by default.
 ## Data Safety
 
 Data is stored locally in the current browser. Browser storage can be cleared by the user, browser settings, or system cleanup tools, so use **Settings -> Export JSON** for backups.
+
+## Tautulli Import
+
+Open **Settings -> Tautulli import** and enter:
+
+- Tautulli URL, for example `http://192.168.1.20:8181`
+- Tautulli API key
+- Row count to import
+- Tautulli/Plex usernames mapped to Tav, Dee, or Together
+
+The importer reads Tautulli `get_history`, creates missing shows, logs sessions, and dedupes repeat imports by Tautulli history row. If the browser blocks a direct request because of CORS or network rules, open the generated Tautulli API URL separately and paste the JSON response into the fallback JSON field.
 
 ## Legacy Prototype
 

@@ -48,3 +48,15 @@ it("logs a session from the sessions view", async () => {
     expect.arrayContaining([expect.objectContaining({ runtimeMinutes: 44 })]),
   );
 });
+
+it("shows Tautulli import controls in settings", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.click(screen.getByRole("button", { name: /settings/i }));
+
+  expect(screen.getByRole("heading", { name: /tautulli import/i })).toBeInTheDocument();
+  expect(screen.getByLabelText(/tautulli url/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/api key/i)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /import tautulli/i })).toBeInTheDocument();
+});
