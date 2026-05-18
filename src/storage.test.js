@@ -25,6 +25,31 @@ describe("storage", () => {
     expect(loadData()).toEqual(sampleData);
   });
 
+  it("migrates the original prototype household names without changing viewer ids", () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...sampleData,
+        settings: {
+          ...sampleData.settings,
+          householdName: "Maya & Theo",
+          people: [
+            { id: "maya", name: "Maya", short: "M", color: "#e8623c" },
+            { id: "theo", name: "Theo", short: "T", color: "#4ec9b0" },
+          ],
+        },
+      }),
+    );
+
+    expect(loadData().settings).toMatchObject({
+      householdName: "T & D",
+      people: [
+        { id: "maya", name: "Tav", short: "T" },
+        { id: "theo", name: "Dee", short: "D" },
+      ],
+    });
+  });
+
   it("saves and loads a valid data set", () => {
     const next = {
       ...sampleData,

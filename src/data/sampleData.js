@@ -1,10 +1,10 @@
 export const sampleData = {
   version: 1,
   settings: {
-    householdName: "Maya & Theo",
+    householdName: "T & D",
     people: [
-      { id: "maya", name: "Maya", short: "M", color: "#e8623c" },
-      { id: "theo", name: "Theo", short: "T", color: "#4ec9b0" },
+      { id: "maya", name: "Tav", short: "T", color: "#e8623c" },
+      { id: "theo", name: "Dee", short: "D", color: "#4ec9b0" },
     ],
     togetherColor: "#f0c24a",
     density: "cozy",
@@ -50,7 +50,7 @@ export const sampleData = {
       runtime: 47,
       watchMode: "theo",
       rating: 8.5,
-      note: "Theo solo queue.",
+      note: "Dee solo queue.",
     },
     {
       id: "diplomat",
@@ -64,7 +64,7 @@ export const sampleData = {
       runtime: 51,
       watchMode: "maya",
       rating: 7.9,
-      note: "Maya solo queue.",
+      note: "Tav solo queue.",
     },
     {
       id: "shogun",

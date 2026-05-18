@@ -87,13 +87,13 @@ function App() {
       <TweaksPanel title="Tweaks">
         <TweakSection label="Accent colors">
           <TweakColor
-            label="Maya"
+            label="Tav"
             value={t.mayaColor}
             onChange={v => setTweak("mayaColor", v)}
             options={["#e8623c", "#d04848", "#e4a04a", "#c87aa8", "#7ab9d4"]}
           />
           <TweakColor
-            label="Theo"
+            label="Dee"
             value={t.theoColor}
             onChange={v => setTweak("theoColor", v)}
             options={["#4ec9b0", "#7aa86e", "#5a9ed9", "#9c7cd6", "#d4b35a"]}

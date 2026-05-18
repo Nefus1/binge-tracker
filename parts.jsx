@@ -57,8 +57,8 @@ function ModeDot({ mode, size = 8 }) {
 function ModeLabel({ mode }) {
   const base = { color: "var(--ink-dim)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", fontFamily: "var(--mono)" };
   if (mode === "together") return <span style={{ whiteSpace: "nowrap" }}><ModeDot mode="together" /> <span style={base}>Together</span></span>;
-  if (mode === "M") return <span style={{ whiteSpace: "nowrap" }}><ModeDot mode="M" /> <span style={base}>Maya · solo</span></span>;
-  return <span style={{ whiteSpace: "nowrap" }}><ModeDot mode="T" /> <span style={base}>Theo · solo</span></span>;
+  if (mode === "M") return <span style={{ whiteSpace: "nowrap" }}><ModeDot mode="M" /> <span style={base}>Tav · solo</span></span>;
+  return <span style={{ whiteSpace: "nowrap" }}><ModeDot mode="T" /> <span style={base}>Dee · solo</span></span>;
 }
 
 // ---------- header ----------
@@ -80,7 +80,7 @@ function TopBar({ range, setRange }) {
         <div style={{ width: 1, height: 28, background: "var(--line-2)" }} />
         <div>
           <div className="eyebrow">Household</div>
-          <div className="serif" style={{ fontSize: 18, fontStyle: "italic", lineHeight: 1 }}>Maya &amp; Theo</div>
+          <div className="serif" style={{ fontSize: 18, fontStyle: "italic", lineHeight: 1 }}>T &amp; D</div>
         </div>
       </div>
 
@@ -150,7 +150,7 @@ function Logo() {
 function Avatars() {
   return (
     <div style={{ display: "flex" }}>
-      {[{ n: "M", c: "var(--maya)" }, { n: "T", c: "var(--theo)" }].map((p, i) => (
+      {[{ n: "T", c: "var(--maya)" }, { n: "D", c: "var(--theo)" }].map((p, i) => (
         <div key={p.n} style={{
           width: 32, height: 32, borderRadius: "50%",
           background: p.c, color: "var(--bg)",
@@ -178,8 +178,8 @@ function Hero({ range }) {
 
   const segs = [
     { k: "Together", v: cur.c, c: "var(--together)" },
-    { k: "Maya solo", v: cur.m, c: "var(--maya)" },
-    { k: "Theo solo", v: cur.t, c: "var(--theo)" },
+    { k: "Tav solo", v: cur.m, c: "var(--maya)" },
+    { k: "Dee solo", v: cur.t, c: "var(--theo)" },
   ];
 
   return (
@@ -304,8 +304,8 @@ function WeeklyChart() {
         right={
           <div style={{ display: "flex", gap: 18, fontSize: 11 }}>
             <Legend swatch="var(--together)" label="Together" />
-            <Legend swatch="var(--maya)" label="Maya" />
-            <Legend swatch="var(--theo)" label="Theo" />
+            <Legend swatch="var(--maya)" label="Tav" />
+            <Legend swatch="var(--theo)" label="Dee" />
           </div>
         }
       />
@@ -343,8 +343,8 @@ function WeeklyChart() {
                       whiteSpace: "nowrap",
                     }}>{total.toFixed(1)}h ↓</div>
                   )}
-                  <div title={`Theo solo ${d.t}h`} style={{ height: tH, background: "var(--theo)", opacity: isLast ? 1 : 0.85 }} />
-                  <div title={`Maya solo ${d.m}h`} style={{ height: mH, background: "var(--maya)", opacity: isLast ? 1 : 0.85 }} />
+                  <div title={`Dee solo ${d.t}h`} style={{ height: tH, background: "var(--theo)", opacity: isLast ? 1 : 0.85 }} />
+                  <div title={`Tav solo ${d.m}h`} style={{ height: mH, background: "var(--maya)", opacity: isLast ? 1 : 0.85 }} />
                   <div title={`Together ${d.c}h`}  style={{ height: cH, background: "var(--together)", opacity: isLast ? 1 : 0.85 }} />
                 </div>
               );
@@ -509,7 +509,7 @@ function CoWatchRing() {
           {segs.map(s => (
             <div key={s.k} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
               <span><ModeDot mode={s.k === "together" ? "together" : s.k} /> <span style={{ fontSize: 12, color: "var(--ink-dim)", marginLeft: 6, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: "var(--mono)" }}>
-                {s.k === "together" ? "Together" : s.k === "M" ? "Maya solo" : "Theo solo"}
+                {s.k === "together" ? "Together" : s.k === "M" ? "Tav solo" : "Dee solo"}
               </span></span>
               <span className="mono" style={{ fontSize: 13, fontWeight: 500 }}>
                 {s.v.toFixed(1)}h <span style={{ color: "var(--ink-mute)", fontSize: 10 }}>· {Math.round((s.v / total) * 100)}%</span>

@@ -8,7 +8,7 @@ The production app is a Vite React single-page app. It stores data in the browse
 
 - Dashboard metrics generated from real local sessions
 - Library management for active, completed, and archived shows
-- Session logging by viewer: Maya, Theo, or Together
+- Session logging by viewer: Tav, Dee, or Together
 - CSV export for the filtered session log
 - JSON import/export, reset-to-sample, and clear-data controls
 - Household names, colors, and density settings

@@ -2,8 +2,8 @@
 // Two viewers, 12 weeks of history, real prestige-TV slate.
 
 const PEOPLE = {
-  M: { key: "M", name: "Maya",  short: "M", color: "var(--maya)" },
-  T: { key: "T", name: "Theo",  short: "T", color: "var(--theo)" },
+  M: { key: "M", name: "Tav",  short: "T", color: "var(--maya)" },
+  T: { key: "T", name: "Dee",  short: "D", color: "var(--theo)" },
 };
 
 // 12 weeks of (solo M, solo T, together) hours. Most recent week last.

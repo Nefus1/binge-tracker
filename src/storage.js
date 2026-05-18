@@ -2,6 +2,25 @@ import { cloneSampleData } from "./data/sampleData.js";
 
 export const STORAGE_KEY = "binge-tracker:v1";
 
+export function normalizeHouseholdNames(data) {
+  const next = structuredClone(data);
+  if (next.settings?.householdName === "Maya & Theo") {
+    next.settings.householdName = "T & D";
+  }
+  if (Array.isArray(next.settings?.people)) {
+    next.settings.people = next.settings.people.map((person) => {
+      if (person.id === "maya" && person.name === "Maya") {
+        return { ...person, name: "Tav", short: "T" };
+      }
+      if (person.id === "theo" && person.name === "Theo") {
+        return { ...person, name: "Dee", short: "D" };
+      }
+      return person;
+    });
+  }
+  return next;
+}
+
 export function validateData(data) {
   if (!data || typeof data !== "object") {
     return { ok: false, error: "Data must be an object." };
@@ -46,7 +65,7 @@ export function loadData() {
     const parsed = JSON.parse(raw);
     const result = validateData(parsed);
     if (result.ok) {
-      return parsed;
+      return normalizeHouseholdNames(parsed);
     }
     localStorage.setItem(`${STORAGE_KEY}:corrupt`, raw);
     return cloneSampleData();
@@ -79,8 +98,9 @@ export function importData(raw) {
     if (!result.ok) {
       return result;
     }
-    saveData(parsed);
-    return { ok: true, data: parsed };
+    const normalized = normalizeHouseholdNames(parsed);
+    saveData(normalized);
+    return { ok: true, data: normalized };
   } catch {
     return { ok: false, error: "Import file is not valid JSON." };
   }
