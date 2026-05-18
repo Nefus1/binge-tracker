@@ -63,7 +63,7 @@ export function buildTmdbSearchUrl({
   return url;
 }
 
-function buildTmdbDetailsUrl({ credential, mediaType, id, language = "en-US" }) {
+export function buildTmdbDetailsUrl({ credential, mediaType, id, language = "en-US" }) {
   const url = new URL(`${TMDB_API_BASE}/${mediaType}/${id}`);
   url.searchParams.set("language", language || "en-US");
   addCredential(url, credential);
@@ -114,6 +114,76 @@ export function mapTmdbDetailsToShowPatch(details, mediaType) {
     ...(details.poster_path ? { posterUrl: buildTmdbImageUrl(details.poster_path) } : {}),
     ...(details.backdrop_path ? { backdropUrl: buildTmdbImageUrl(details.backdrop_path, "w780") } : {}),
     ...(Number(details.vote_average) ? { rating: Number(details.vote_average.toFixed?.(1) ?? details.vote_average) } : {}),
+    ...(Array.isArray(details.seasons)
+      ? {
+          seasons: details.seasons
+            .filter((season) => Number(season.season_number) > 0)
+            .map((season) => ({
+              seasonNumber: Number(season.season_number),
+              name: season.name || `Season ${season.season_number}`,
+              episodeCount: Number(season.episode_count) || 0,
+              airDate: season.air_date || "",
+              posterUrl: buildTmdbImageUrl(season.poster_path),
+            })),
+        }
+      : {}),
+  };
+}
+
+export function mapTmdbSearchResult(result, mediaType = "tv") {
+  const year = Number(String(mediaType === "movie" ? result.release_date : result.first_air_date).slice(0, 4));
+  return {
+    tmdbId: result.id,
+    tmdbType: mediaType,
+    title: mediaType === "movie" ? result.title : result.name,
+    year: year || "",
+    overview: result.overview || "",
+    posterUrl: buildTmdbImageUrl(result.poster_path),
+    backdropUrl: buildTmdbImageUrl(result.backdrop_path, "w780"),
+    rating: Number(result.vote_average) || 0,
+  };
+}
+
+export async function searchTmdbTvShows({ credential, query, language = "en-US" }) {
+  const url = buildTmdbSearchUrl({
+    credential,
+    mediaType: "tv",
+    query,
+    language,
+  });
+  const payload = await fetchJson(url, credential);
+  return (payload.results ?? []).slice(0, 8).map((result) => mapTmdbSearchResult(result, "tv"));
+}
+
+export async function fetchTmdbTvShowDetails({ credential, tmdbId, language = "en-US" }) {
+  const url = buildTmdbDetailsUrl({
+    credential,
+    mediaType: "tv",
+    id: tmdbId,
+    language,
+  });
+  return fetchJson(url, credential);
+}
+
+export function createShowInputFromTmdbDetails(details, watchMode = "together") {
+  const patch = mapTmdbDetailsToShowPatch(details, "tv");
+  const firstSeason = patch.seasons?.[0];
+  return {
+    title: patch.title ?? details.name ?? "",
+    year: patch.year ?? "",
+    genre: patch.genre ?? "TV",
+    season: firstSeason?.seasonNumber ?? 1,
+    totalEpisodes: patch.totalEpisodes ?? firstSeason?.episodeCount ?? 1,
+    currentEpisode: 0,
+    runtime: patch.runtime ?? 45,
+    watchMode,
+    rating: patch.rating ?? 0,
+    note: patch.note ?? "",
+    tmdbId: patch.tmdbId,
+    tmdbType: "tv",
+    posterUrl: patch.posterUrl ?? "",
+    backdropUrl: patch.backdropUrl ?? "",
+    seasons: patch.seasons ?? [],
   };
 }
 

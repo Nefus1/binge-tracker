@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildTmdbImageUrl,
   buildTmdbSearchUrl,
+  createShowInputFromTmdbDetails,
   enrichShowsWithTmdb,
+  fetchTmdbTvShowDetails,
   getTmdbMediaType,
   mapTmdbDetailsToShowPatch,
+  searchTmdbTvShows,
 } from "./tmdb.js";
 import { sampleData } from "./data/sampleData.js";
 
@@ -51,6 +54,11 @@ describe("tmdb enrichment", () => {
         genres: [{ name: "Sci-Fi & Fantasy" }, { name: "Drama" }],
         episode_run_time: [50],
         number_of_episodes: 19,
+        seasons: [
+          { season_number: 0, name: "Specials", episode_count: 2 },
+          { season_number: 1, name: "Season 1", episode_count: 9, air_date: "2022-02-18" },
+          { season_number: 2, name: "Season 2", episode_count: 10, air_date: "2025-01-17" },
+        ],
         overview: "Mark leads a team of office workers.",
         poster_path: "/poster.jpg",
         backdrop_path: "/backdrop.jpg",
@@ -70,6 +78,99 @@ describe("tmdb enrichment", () => {
       rating: 8.4,
       posterUrl: "https://image.tmdb.org/t/p/w342/poster.jpg",
     });
+    expect(patch.seasons).toEqual([
+      {
+        seasonNumber: 1,
+        name: "Season 1",
+        episodeCount: 9,
+        airDate: "2022-02-18",
+        posterUrl: "",
+      },
+      {
+        seasonNumber: 2,
+        name: "Season 2",
+        episodeCount: 10,
+        airDate: "2025-01-17",
+        posterUrl: "",
+      },
+    ]);
+  });
+
+  it("creates a local show input from TMDB TV details with season metadata", () => {
+    expect(
+      createShowInputFromTmdbDetails(
+        {
+          id: 95396,
+          name: "Severance",
+          first_air_date: "2022-02-18",
+          genres: [{ name: "Sci-Fi & Fantasy" }],
+          episode_run_time: [50],
+          number_of_episodes: 19,
+          seasons: [
+            { season_number: 1, name: "Season 1", episode_count: 9, air_date: "2022-02-18" },
+            { season_number: 2, name: "Season 2", episode_count: 10, air_date: "2025-01-17" },
+          ],
+          overview: "Office workers, severed.",
+          poster_path: "/poster.jpg",
+          vote_average: 8.4,
+        },
+        "maya",
+      ),
+    ).toMatchObject({
+      title: "Severance",
+      year: 2022,
+      genre: "Sci-Fi & Fantasy",
+      season: 1,
+      totalEpisodes: 19,
+      runtime: 50,
+      watchMode: "maya",
+      tmdbId: 95396,
+      tmdbType: "tv",
+      seasons: [
+        { seasonNumber: 1, episodeCount: 9 },
+        { seasonNumber: 2, episodeCount: 10 },
+      ],
+    });
+  });
+
+  it("searches TMDB TV shows and fetches details", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (url) => ({
+      ok: true,
+      json: async () => {
+        const text = url.toString();
+        if (text.includes("/search/tv")) {
+          return {
+            results: [
+              {
+                id: 95396,
+                name: "Severance",
+                first_air_date: "2022-02-18",
+                overview: "Office workers, severed.",
+                poster_path: "/poster.jpg",
+                vote_average: 8.4,
+              },
+            ],
+          };
+        }
+        return { id: 95396, name: "Severance" };
+      },
+    }));
+
+    await expect(searchTmdbTvShows({ credential: "abc123", query: "Severance" })).resolves.toEqual([
+      expect.objectContaining({
+        tmdbId: 95396,
+        title: "Severance",
+        year: 2022,
+        posterUrl: "https://image.tmdb.org/t/p/w342/poster.jpg",
+      }),
+    ]);
+    await expect(fetchTmdbTvShowDetails({ credential: "abc123", tmdbId: 95396 })).resolves.toEqual({
+      id: 95396,
+      name: "Severance",
+    });
+
+    globalThis.fetch = originalFetch;
   });
 
   it("enriches matching shows and reports misses", async () => {

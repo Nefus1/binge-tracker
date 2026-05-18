@@ -1,5 +1,10 @@
-import { Archive, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { Archive, CheckCircle2, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
+import {
+  createShowInputFromTmdbDetails,
+  fetchTmdbTvShowDetails,
+  searchTmdbTvShows,
+} from "../tmdb.js";
 import { Card, EmptyState, Field, SectionHeader, ViewerBadge } from "./ui.jsx";
 
 const initialShowForm = {
@@ -18,6 +23,16 @@ const initialShowForm = {
 export function Library({ data, onAddShow, onUpdateShow, onDeleteShow, onQuickLog }) {
   const [form, setForm] = useState(initialShowForm);
   const [filter, setFilter] = useState("all");
+  const [tmdbSearch, setTmdbSearch] = useState({
+    credential: localStorage.getItem("binge-tracker:tmdb:credential") ?? "",
+    language: localStorage.getItem("binge-tracker:tmdb:language") ?? "en-US",
+    query: "",
+    watchMode: "together",
+  });
+  const [tmdbResults, setTmdbResults] = useState([]);
+  const [tmdbStatus, setTmdbStatus] = useState("");
+  const [isSearchingTmdb, setIsSearchingTmdb] = useState(false);
+  const [addingTmdbId, setAddingTmdbId] = useState(null);
 
   const visibleShows = data.shows.filter((show) => filter === "all" || show.status === filter);
 
@@ -31,8 +46,121 @@ export function Library({ data, onAddShow, onUpdateShow, onDeleteShow, onQuickLo
     setForm(initialShowForm);
   }
 
+  function updateTmdbSearch(name, value) {
+    setTmdbSearch((current) => ({ ...current, [name]: value }));
+  }
+
+  async function submitTmdbSearch(event) {
+    event.preventDefault();
+    setIsSearchingTmdb(true);
+    setTmdbStatus("");
+    try {
+      localStorage.setItem("binge-tracker:tmdb:credential", tmdbSearch.credential);
+      localStorage.setItem("binge-tracker:tmdb:language", tmdbSearch.language);
+      const results = await searchTmdbTvShows({
+        credential: tmdbSearch.credential,
+        query: tmdbSearch.query,
+        language: tmdbSearch.language,
+      });
+      setTmdbResults(results);
+      setTmdbStatus(results.length ? `${results.length} TMDB matches found.` : "No TMDB matches found.");
+    } catch (error) {
+      setTmdbStatus(error.message);
+      setTmdbResults([]);
+    } finally {
+      setIsSearchingTmdb(false);
+    }
+  }
+
+  async function addTmdbShow(result) {
+    setAddingTmdbId(result.tmdbId);
+    setTmdbStatus("");
+    try {
+      const details = await fetchTmdbTvShowDetails({
+        credential: tmdbSearch.credential,
+        tmdbId: result.tmdbId,
+        language: tmdbSearch.language,
+      });
+      onAddShow(createShowInputFromTmdbDetails(details, tmdbSearch.watchMode));
+      setTmdbStatus(`${result.title} added with TMDB season metadata.`);
+    } catch (error) {
+      setTmdbStatus(error.message);
+    } finally {
+      setAddingTmdbId(null);
+    }
+  }
+
   return (
     <div className="view library-view">
+      <Card>
+        <SectionHeader title="Search TMDB" eyebrow="Add from database" />
+        <form className="form-grid" onSubmit={submitTmdbSearch}>
+          <Field label="TMDB API key or token">
+            <input
+              value={tmdbSearch.credential}
+              onChange={(event) => updateTmdbSearch("credential", event.target.value)}
+              placeholder="Saved from Settings if available"
+              type="password"
+            />
+          </Field>
+          <Field label="Show search">
+            <input
+              value={tmdbSearch.query}
+              onChange={(event) => updateTmdbSearch("query", event.target.value)}
+              placeholder="Severance, The Bear, Silo..."
+              required
+            />
+          </Field>
+          <Field label="Language">
+            <input
+              value={tmdbSearch.language}
+              onChange={(event) => updateTmdbSearch("language", event.target.value)}
+              placeholder="en-US"
+            />
+          </Field>
+          <Field label="Watch mode">
+            <select value={tmdbSearch.watchMode} onChange={(event) => updateTmdbSearch("watchMode", event.target.value)}>
+              <option value="together">Together</option>
+              {data.settings.people.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <button className="primary-btn form-submit" type="submit" disabled={isSearchingTmdb}>
+            <Search size={18} aria-hidden="true" />
+            {isSearchingTmdb ? "Searching..." : "Search TMDB"}
+          </button>
+        </form>
+        {tmdbStatus && <p className="settings-note">{tmdbStatus}</p>}
+        {tmdbResults.length > 0 && (
+          <div className="tmdb-results">
+            {tmdbResults.map((result) => (
+              <article key={result.tmdbId} className="tmdb-result">
+                <div
+                  className={result.posterUrl ? "library-poster has-poster" : "library-poster"}
+                  style={result.posterUrl ? { backgroundImage: `url(${result.posterUrl})` } : undefined}
+                >
+                  {!result.posterUrl && result.title.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h3>{result.title}</h3>
+                  <p>
+                    {result.year || "Unknown year"} · TMDB {result.rating ? result.rating.toFixed(1) : "unrated"}
+                  </p>
+                  <p>{result.overview || "No overview available."}</p>
+                </div>
+                <button className="ghost-btn" type="button" onClick={() => addTmdbShow(result)} disabled={addingTmdbId === result.tmdbId}>
+                  <Plus size={16} aria-hidden="true" />
+                  {addingTmdbId === result.tmdbId ? "Adding..." : "Add"}
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <Card>
         <SectionHeader title="Add show" eyebrow="Library intake" />
         <form className="form-grid" onSubmit={submit}>

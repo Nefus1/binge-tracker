@@ -51,6 +51,10 @@ export default function App() {
   function addShow(input) {
     const title = input.title.trim();
     if (!title) return;
+    if (input.tmdbId && data.shows.some((show) => show.tmdbId === input.tmdbId && show.tmdbType === input.tmdbType)) {
+      showNotice(`${title} is already in the library.`);
+      return;
+    }
     const idBase = toSlug(title) || "show";
     const existing = new Set(data.shows.map((show) => show.id));
     let id = idBase;
@@ -72,6 +76,11 @@ export default function App() {
       watchMode: input.watchMode || "together",
       rating: Number(input.rating) || 0,
       note: input.note.trim(),
+      ...(input.tmdbId ? { tmdbId: input.tmdbId } : {}),
+      ...(input.tmdbType ? { tmdbType: input.tmdbType } : {}),
+      ...(input.posterUrl ? { posterUrl: input.posterUrl } : {}),
+      ...(input.backdropUrl ? { backdropUrl: input.backdropUrl } : {}),
+      ...(Array.isArray(input.seasons) ? { seasons: input.seasons } : {}),
     };
     setData((current) => ({ ...current, shows: [show, ...current.shows] }));
     showNotice(`${title} added to the library.`);

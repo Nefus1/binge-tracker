@@ -1,11 +1,18 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import App from "./App.jsx";
 import { STORAGE_KEY } from "./storage.js";
 
+const originalFetch = globalThis.fetch;
+
 beforeEach(() => {
   localStorage.clear();
+});
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
 });
 
 it("renders dashboard metrics from local data", () => {
@@ -30,6 +37,73 @@ it("adds a show from the library and persists it", async () => {
   expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).shows).toEqual(
     expect.arrayContaining([expect.objectContaining({ title: "Poker Face" })]),
   );
+});
+
+it("searches TMDB from the library and adds a show with season metadata", async () => {
+  globalThis.fetch = vi.fn(async (url) => ({
+    ok: true,
+    json: async () => {
+      const href = url.toString();
+      if (href.includes("/search/tv")) {
+        return {
+          results: [
+            {
+              id: 93740,
+              name: "Foundation",
+              first_air_date: "2021-09-24",
+              overview: "Follow a band of exiles.",
+              poster_path: "/foundation.jpg",
+              vote_average: 7.8,
+            },
+          ],
+        };
+      }
+      return {
+        id: 93740,
+        name: "Foundation",
+        first_air_date: "2021-09-24",
+        genres: [{ name: "Sci-Fi & Fantasy" }],
+        episode_run_time: [55],
+        number_of_episodes: 30,
+        seasons: [
+          { season_number: 1, name: "Season 1", episode_count: 10, air_date: "2021-09-24" },
+          { season_number: 2, name: "Season 2", episode_count: 10, air_date: "2023-07-14" },
+          { season_number: 3, name: "Season 3", episode_count: 10, air_date: "2025-07-11" },
+        ],
+        overview: "Follow a band of exiles.",
+        poster_path: "/foundation.jpg",
+        vote_average: 7.8,
+      };
+    },
+  }));
+
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.click(screen.getByRole("button", { name: /library/i }));
+  await user.type(screen.getByLabelText(/tmdb api key or token/i), "abc123");
+  await user.type(screen.getByLabelText(/show search/i), "Foundation");
+  await user.click(screen.getByRole("button", { name: /search tmdb/i }));
+  expect(await screen.findByText("Foundation")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).shows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Foundation",
+          tmdbId: 93740,
+          totalEpisodes: 30,
+          seasons: [
+            expect.objectContaining({ seasonNumber: 1, episodeCount: 10 }),
+            expect.objectContaining({ seasonNumber: 2, episodeCount: 10 }),
+            expect.objectContaining({ seasonNumber: 3, episodeCount: 10 }),
+          ],
+        }),
+      ]),
+    );
+  });
 });
 
 it("logs a session from the sessions view", async () => {

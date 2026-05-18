@@ -541,6 +541,30 @@ textarea:focus {
   gap: 14px;
 }
 
+.tmdb-results {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.tmdb-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.tmdb-result h3 {
+  margin: 0;
+}
+
+.tmdb-result p {
+  margin: 5px 0 0;
+  color: var(--muted);
+}
+
 .show-row-card {
   grid-template-columns: auto minmax(0, 1fr);
 }
@@ -663,7 +687,8 @@ textarea:focus {
   .form-grid,
   .settings-form,
   .show-row-card,
-  .paste-import {
+  .paste-import,
+  .tmdb-result {
     grid-template-columns: 1fr;
   }
 
