@@ -88,7 +88,12 @@ export function Library({ data, onAddShow, onUpdateShow, onDeleteShow, onQuickLo
         <div className="library-grid">
           {visibleShows.map((show) => (
             <Card key={show.id} className="show-row-card">
-              <div className="library-poster">{show.title.slice(0, 2).toUpperCase()}</div>
+              <div
+                className={show.posterUrl ? "library-poster has-poster" : "library-poster"}
+                style={show.posterUrl ? { backgroundImage: `url(${show.posterUrl})` } : undefined}
+              >
+                {!show.posterUrl && show.title.slice(0, 2).toUpperCase()}
+              </div>
               <div className="library-detail">
                 <div className="row-between">
                   <div>

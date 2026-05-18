@@ -1,4 +1,4 @@
-import { Download, RotateCcw, ServerCog, Trash2, Upload } from "lucide-react";
+import { Download, Film, RotateCcw, ServerCog, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import {
   clearStoredData,
@@ -13,6 +13,7 @@ import {
   parseTautulliPayload,
   parseUserMap,
 } from "../tautulli.js";
+import { enrichShowsWithTmdb } from "../tmdb.js";
 import { Card, Field, SectionHeader } from "./ui.jsx";
 
 export function Settings({ data, onUpdateSettings, onReplaceData }) {
@@ -29,6 +30,12 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
   });
   const [tautulliStatus, setTautulliStatus] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [tmdb, setTmdb] = useState({
+    credential: localStorage.getItem("binge-tracker:tmdb:credential") ?? "",
+    language: localStorage.getItem("binge-tracker:tmdb:language") ?? "en-US",
+  });
+  const [tmdbStatus, setTmdbStatus] = useState("");
+  const [isEnriching, setIsEnriching] = useState(false);
 
   function updatePerson(personId, patch) {
     setSettings((current) => ({
@@ -114,6 +121,30 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
     }
   }
 
+  function updateTmdb(name, value) {
+    setTmdb((current) => ({ ...current, [name]: value }));
+  }
+
+  async function enrichFromTmdb(event) {
+    event.preventDefault();
+    setIsEnriching(true);
+    setTmdbStatus("");
+    try {
+      localStorage.setItem("binge-tracker:tmdb:credential", tmdb.credential);
+      localStorage.setItem("binge-tracker:tmdb:language", tmdb.language);
+      const result = await enrichShowsWithTmdb(data, {
+        credential: tmdb.credential,
+        language: tmdb.language,
+      });
+      onReplaceData(result.data, `TMDB enriched ${result.enriched} shows.`);
+      setTmdbStatus(`Enriched ${result.enriched} shows. Missed ${result.missed}.`);
+    } catch (error) {
+      setTmdbStatus(error.message);
+    } finally {
+      setIsEnriching(false);
+    }
+  }
+
   return (
     <div className="view settings-view">
       <Card>
@@ -158,7 +189,7 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
               type="url"
             />
           </Field>
-          <Field label="API key">
+          <Field label="Tautulli API key">
             <input
               value={tautulli.apiKey}
               onChange={(event) => updateTautulli("apiKey", event.target.value)}
@@ -215,6 +246,35 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
         {tautulliStatus && <p className="settings-note">{tautulliStatus}</p>}
         <p className="settings-note">
           Unmapped Tautulli users import as Together. Repeat imports are deduped by Tautulli history row.
+        </p>
+      </Card>
+
+      <Card>
+        <SectionHeader title="TMDB enrichment" eyebrow="Posters and metadata" />
+        <form className="settings-form" onSubmit={enrichFromTmdb}>
+          <Field label="TMDB API key or token">
+            <input
+              value={tmdb.credential}
+              onChange={(event) => updateTmdb("credential", event.target.value)}
+              placeholder="v3 API key or Read Access Token"
+              type="password"
+            />
+          </Field>
+          <Field label="Language">
+            <input
+              value={tmdb.language}
+              onChange={(event) => updateTmdb("language", event.target.value)}
+              placeholder="en-US"
+            />
+          </Field>
+          <button className="primary-btn form-submit" type="submit" disabled={isEnriching}>
+            <Film size={18} aria-hidden="true" />
+            {isEnriching ? "Enriching..." : "Enrich with TMDB"}
+          </button>
+        </form>
+        {tmdbStatus && <p className="settings-note">{tmdbStatus}</p>}
+        <p className="settings-note">
+          TMDB searches your current Library by title and year, then adds posters, genres, ratings, runtime, overview, and TMDB IDs.
         </p>
       </Card>
 

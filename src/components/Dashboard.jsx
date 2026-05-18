@@ -75,7 +75,12 @@ export function Dashboard({ data, metrics, onViewChange }) {
           <div className="show-grid">
             {metrics.activeShows.map((show) => (
               <article key={show.id} className="show-card">
-                <div className="poster">{show.title.slice(0, 2).toUpperCase()}</div>
+                <div
+                  className={show.posterUrl ? "poster has-poster" : "poster"}
+                  style={show.posterUrl ? { backgroundImage: `url(${show.posterUrl})` } : undefined}
+                >
+                  {!show.posterUrl && show.title.slice(0, 2).toUpperCase()}
+                </div>
                 <div>
                   <h4>{show.title}</h4>
                   <p>

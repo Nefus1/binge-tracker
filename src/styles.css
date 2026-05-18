@@ -430,6 +430,13 @@ textarea:focus {
     #25261f;
   color: var(--together);
   font-weight: 900;
+  background-size: cover;
+  background-position: center;
+}
+
+.poster.has-poster,
+.library-poster.has-poster {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
 .show-card h4 {
