@@ -120,6 +120,82 @@ it("searches TMDB from the library and adds a show with season metadata", async 
   });
 });
 
+it("edits an existing show and replaces metadata from a chosen TMDB match", async () => {
+  localStorage.setItem("binge-tracker:tmdb:credential", "abc123");
+  globalThis.fetch = vi.fn(async (url) => ({
+    ok: true,
+    json: async () => {
+      const href = url.toString();
+      if (href.includes("/search/tv")) {
+        return {
+          results: [
+            {
+              id: 125988,
+              name: "Silo",
+              first_air_date: "2023-05-04",
+              overview: "A community exists in a giant underground silo.",
+              poster_path: "/silo.jpg",
+              vote_average: 8.2,
+            },
+          ],
+        };
+      }
+      return {
+        id: 125988,
+        name: "Silo",
+        first_air_date: "2023-05-04",
+        genres: [{ name: "Sci-Fi & Fantasy" }],
+        episode_run_time: [49],
+        number_of_episodes: 20,
+        seasons: [
+          { season_number: 1, name: "Season 1", episode_count: 10, air_date: "2023-05-04" },
+          { season_number: 2, name: "Season 2", episode_count: 10, air_date: "2024-11-15" },
+        ],
+        overview: "A community exists in a giant underground silo.",
+        poster_path: "/silo.jpg",
+        vote_average: 8.2,
+      };
+    },
+  }));
+
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.click(screen.getByRole("button", { name: /library/i }));
+  await user.click(screen.getByRole("button", { name: /edit severance metadata/i }));
+  await user.clear(screen.getByLabelText(/edit title/i));
+  await user.type(screen.getByLabelText(/edit title/i), "Severance Manual");
+  await user.click(screen.getByRole("button", { name: /save metadata/i }));
+
+  expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).shows).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: "severance", title: "Severance Manual" })]),
+  );
+
+  await user.click(screen.getByRole("button", { name: /edit severance manual metadata/i }));
+  await user.clear(screen.getByLabelText(/metadata search/i));
+  await user.type(screen.getByLabelText(/metadata search/i), "Silo");
+  await user.click(screen.getByRole("button", { name: /search metadata/i }));
+  expect(await screen.findByText(/A community exists/i)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /use metadata/i }));
+
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).shows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "severance",
+          title: "Silo",
+          tmdbId: 125988,
+          totalEpisodes: 20,
+          seasons: [
+            expect.objectContaining({ seasonNumber: 1, episodeCount: 10 }),
+            expect.objectContaining({ seasonNumber: 2, episodeCount: 10 }),
+          ],
+        }),
+      ]),
+    );
+  });
+});
+
 it("logs a session from the sessions view", async () => {
   const user = userEvent.setup();
   render(<App />);

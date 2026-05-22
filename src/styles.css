@@ -791,6 +791,40 @@ textarea:focus {
   gap: 14px;
 }
 
+.library-show-card {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.media-edit-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.media-edit-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.metadata-search-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) 140px 130px auto;
+  gap: 14px;
+  align-items: end;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
 .tmdb-results {
   display: grid;
   gap: 12px;
@@ -1011,6 +1045,7 @@ textarea:focus {
   .content-grid,
   .form-grid,
   .settings-form,
+  .metadata-search-form,
   .analysis-controls,
   .show-row-card,
   .paste-import,

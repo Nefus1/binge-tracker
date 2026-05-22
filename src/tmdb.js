@@ -145,20 +145,39 @@ export function mapTmdbSearchResult(result, mediaType = "tv") {
 }
 
 export async function searchTmdbTvShows({ credential, query, language = "en-US" }) {
-  const url = buildTmdbSearchUrl({
+  return searchTmdbMedia({
     credential,
     mediaType: "tv",
     query,
     language,
   });
+}
+
+export async function searchTmdbMedia({ credential, mediaType = "tv", query, year, language = "en-US" }) {
+  const url = buildTmdbSearchUrl({
+    credential,
+    mediaType,
+    query,
+    year,
+    language,
+  });
   const payload = await fetchJson(url, credential);
-  return (payload.results ?? []).slice(0, 8).map((result) => mapTmdbSearchResult(result, "tv"));
+  return (payload.results ?? []).slice(0, 8).map((result) => mapTmdbSearchResult(result, mediaType));
 }
 
 export async function fetchTmdbTvShowDetails({ credential, tmdbId, language = "en-US" }) {
-  const url = buildTmdbDetailsUrl({
+  return fetchTmdbMediaDetails({
     credential,
     mediaType: "tv",
+    tmdbId,
+    language,
+  });
+}
+
+export async function fetchTmdbMediaDetails({ credential, mediaType = "tv", tmdbId, language = "en-US" }) {
+  const url = buildTmdbDetailsUrl({
+    credential,
+    mediaType,
     id: tmdbId,
     language,
   });

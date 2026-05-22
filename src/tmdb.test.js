@@ -4,9 +4,11 @@ import {
   buildTmdbSearchUrl,
   createShowInputFromTmdbDetails,
   enrichShowsWithTmdb,
+  fetchTmdbMediaDetails,
   fetchTmdbTvShowDetails,
   getTmdbMediaType,
   mapTmdbDetailsToShowPatch,
+  searchTmdbMedia,
   searchTmdbTvShows,
 } from "./tmdb.js";
 import { sampleData } from "./data/sampleData.js";
@@ -169,6 +171,47 @@ describe("tmdb enrichment", () => {
       id: 95396,
       name: "Severance",
     });
+
+    globalThis.fetch = originalFetch;
+  });
+
+  it("searches and fetches arbitrary TMDB media types", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (url) => ({
+      ok: true,
+      json: async () => {
+        const text = url.toString();
+        if (text.includes("/search/movie")) {
+          return {
+            results: [
+              {
+                id: 329865,
+                title: "Arrival",
+                release_date: "2016-11-10",
+                overview: "A linguist works with the military.",
+                poster_path: "/arrival.jpg",
+                vote_average: 7.6,
+              },
+            ],
+          };
+        }
+        return { id: 329865, title: "Arrival", runtime: 116 };
+      },
+    }));
+
+    await expect(
+      searchTmdbMedia({ credential: "abc123", mediaType: "movie", query: "Arrival", year: 2016 }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        tmdbId: 329865,
+        tmdbType: "movie",
+        title: "Arrival",
+        year: 2016,
+      }),
+    ]);
+    await expect(
+      fetchTmdbMediaDetails({ credential: "abc123", mediaType: "movie", tmdbId: 329865 }),
+    ).resolves.toEqual({ id: 329865, title: "Arrival", runtime: 116 });
 
     globalThis.fetch = originalFetch;
   });
