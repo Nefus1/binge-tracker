@@ -1,5 +1,5 @@
 import { Download, Film, RotateCcw, ServerCog, Trash2, Upload } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   clearStoredData,
   createBackupFileName,
@@ -9,6 +9,7 @@ import {
 } from "../storage.js";
 import {
   fetchTautulliHistory,
+  getTautulliImportCandidates,
   mergeTautulliHistory,
   parseTautulliPayload,
   parseUserMap,
@@ -30,6 +31,12 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
   });
   const [tautulliStatus, setTautulliStatus] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [tautulliRows, setTautulliRows] = useState([]);
+  const [selectedTautulliShowIds, setSelectedTautulliShowIds] = useState([]);
+  const tautulliCandidates = useMemo(
+    () => getTautulliImportCandidates(tautulliRows),
+    [tautulliRows],
+  );
   const [tmdb, setTmdb] = useState({
     credential: localStorage.getItem("binge-tracker:tmdb:credential") ?? "",
     language: localStorage.getItem("binge-tracker:tmdb:language") ?? "en-US",
@@ -74,13 +81,24 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
     setTautulli((current) => ({ ...current, [name]: value }));
   }
 
-  function importRows(rows) {
+  function prepareTautulliRows(rows) {
+    const candidates = getTautulliImportCandidates(rows);
+    setTautulliRows(rows);
+    setSelectedTautulliShowIds(candidates.map((candidate) => candidate.id));
+    setTautulliStatus(
+      candidates.length
+        ? `Found ${candidates.length} shows or movies across ${rows.length} Tautulli rows. Choose what to import below.`
+        : "No TV episodes or movies were found in that Tautulli response.",
+    );
+  }
+
+  function importRows(rows, selectedShowIds) {
     const userMap = parseUserMap({
       maya: tautulli.tavUsers,
       theo: tautulli.deeUsers,
       together: tautulli.togetherUsers,
     });
-    const result = mergeTautulliHistory(data, rows, { userMap });
+    const result = mergeTautulliHistory(data, rows, { selectedShowIds, userMap });
     onReplaceData(
       result.data,
       `Tautulli import: ${result.importedSessions} sessions, ${result.createdShows} shows.`,
@@ -88,6 +106,22 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
     setTautulliStatus(
       `Imported ${result.importedSessions} sessions, created ${result.createdShows} shows, skipped ${result.skippedRows} rows.`,
     );
+    setTautulliRows([]);
+    setSelectedTautulliShowIds([]);
+  }
+
+  function toggleTautulliShow(showId) {
+    setSelectedTautulliShowIds((current) =>
+      current.includes(showId) ? current.filter((id) => id !== showId) : [...current, showId],
+    );
+  }
+
+  function importSelectedTautulliRows() {
+    if (!selectedTautulliShowIds.length) {
+      setTautulliStatus("Select at least one show or movie to import.");
+      return;
+    }
+    importRows(tautulliRows, selectedTautulliShowIds);
   }
 
   async function importFromTautulli(event) {
@@ -102,7 +136,7 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
         apiKey: tautulli.apiKey,
         length: tautulli.length,
       });
-      importRows(rows);
+      prepareTautulliRows(rows);
     } catch (error) {
       setTautulliStatus(
         `${error.message} If your browser blocks the request, open the generated Tautulli API URL separately and paste the JSON response below.`,
@@ -114,7 +148,7 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
 
   function importPastedTautulliJson() {
     try {
-      importRows(parseTautulliPayload(tautulli.pastedJson));
+      prepareTautulliRows(parseTautulliPayload(tautulli.pastedJson));
       updateTautulli("pastedJson", "");
     } catch {
       setTautulliStatus("Could not read the pasted Tautulli JSON.");
@@ -228,7 +262,7 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
           </Field>
           <button className="primary-btn form-submit" type="submit" disabled={isImporting}>
             <ServerCog size={18} aria-hidden="true" />
-            {isImporting ? "Importing..." : "Import Tautulli"}
+            {isImporting ? "Loading..." : "Review Tautulli"}
           </button>
         </form>
         <div className="paste-import">
@@ -240,12 +274,61 @@ export function Settings({ data, onUpdateSettings, onReplaceData }) {
             />
           </Field>
           <button className="ghost-btn" type="button" onClick={importPastedTautulliJson}>
-            Import pasted JSON
+            Review pasted JSON
           </button>
         </div>
+        {tautulliCandidates.length > 0 && (
+          <div className="tautulli-review">
+            <div className="row-between">
+              <div>
+                <p className="eyebrow">Import selection</p>
+                <h3>Choose shows to import</h3>
+              </div>
+              <div className="settings-actions">
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  onClick={() => setSelectedTautulliShowIds(tautulliCandidates.map((candidate) => candidate.id))}
+                >
+                  Select all
+                </button>
+                <button className="ghost-btn" type="button" onClick={() => setSelectedTautulliShowIds([])}>
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="tautulli-candidate-list">
+              {tautulliCandidates.map((candidate) => (
+                <label className="tautulli-candidate" key={candidate.id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedTautulliShowIds.includes(candidate.id)}
+                    onChange={() => toggleTautulliShow(candidate.id)}
+                  />
+                  <span>
+                    <strong>{candidate.title}</strong>
+                    <small>
+                      {candidate.mediaType === "movie" ? "Movie" : "TV"} · {candidate.year} ·{" "}
+                      {candidate.sessionCount} history {candidate.sessionCount === 1 ? "row" : "rows"} · latest{" "}
+                      {new Date(candidate.latestWatchedAt).toLocaleDateString()}
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <button
+              className="primary-btn"
+              type="button"
+              onClick={importSelectedTautulliRows}
+              disabled={!selectedTautulliShowIds.length}
+            >
+              Import selected
+            </button>
+          </div>
+        )}
         {tautulliStatus && <p className="settings-note">{tautulliStatus}</p>}
         <p className="settings-note">
-          Unmapped Tautulli users import as Together. Repeat imports are deduped by Tautulli history row.
+          Tautulli history loads into a review list first. Unmapped users import as Together, and repeat imports are deduped by Tautulli history row.
         </p>
       </Card>
 

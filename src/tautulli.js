@@ -135,6 +135,7 @@ function getSessionForRecord(record, showId, viewer) {
 
 export function mergeTautulliHistory(data, rows, options = {}) {
   const userMap = options.userMap ?? {};
+  const selectedShowIds = options.selectedShowIds ? new Set(options.selectedShowIds) : null;
   const next = structuredClone(data);
   const showIds = new Set(next.shows.map((show) => show.id));
   const sessionIds = new Set(next.sessions.map((session) => session.id));
@@ -149,6 +150,10 @@ export function mergeTautulliHistory(data, rows, options = {}) {
     }
 
     const show = getShowForRecord(record);
+    if (selectedShowIds && !selectedShowIds.has(show.id)) {
+      continue;
+    }
+
     if (!showIds.has(show.id)) {
       next.shows.push(show);
       showIds.add(show.id);
@@ -182,6 +187,40 @@ export function mergeTautulliHistory(data, rows, options = {}) {
     importedSessions,
     skippedRows,
   };
+}
+
+export function getTautulliImportCandidates(rows) {
+  const candidates = new Map();
+
+  for (const record of rows) {
+    if (!["episode", "movie"].includes(record.media_type)) {
+      continue;
+    }
+
+    const show = getShowForRecord(record);
+    const timestamp = getRecordTimestamp(record);
+    const existing = candidates.get(show.id);
+    if (existing) {
+      existing.sessionCount += 1;
+      if (new Date(timestamp).getTime() > new Date(existing.latestWatchedAt).getTime()) {
+        existing.latestWatchedAt = timestamp;
+      }
+      continue;
+    }
+
+    candidates.set(show.id, {
+      id: show.id,
+      title: show.title,
+      year: show.year,
+      mediaType: show.source.mediaType,
+      sessionCount: 1,
+      latestWatchedAt: timestamp,
+    });
+  }
+
+  return Array.from(candidates.values()).sort(
+    (a, b) => new Date(b.latestWatchedAt).getTime() - new Date(a.latestWatchedAt).getTime(),
+  );
 }
 
 export function parseTautulliPayload(raw) {

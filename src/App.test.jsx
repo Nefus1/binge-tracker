@@ -137,7 +137,7 @@ it("logs a session from the sessions view", async () => {
   );
 });
 
-it("shows Tautulli import controls in settings", async () => {
+it("reviews pasted Tautulli rows before importing selected shows", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -146,7 +146,59 @@ it("shows Tautulli import controls in settings", async () => {
   expect(screen.getByRole("heading", { name: /tautulli import/i })).toBeInTheDocument();
   expect(screen.getByLabelText(/tautulli url/i)).toBeInTheDocument();
   expect(screen.getByLabelText(/tautulli api key/i)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /import tautulli/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /review tautulli/i })).toBeInTheDocument();
+
+  await user.click(screen.getByLabelText(/paste tautulli json response/i));
+  await user.paste(
+    JSON.stringify({
+      response: {
+        data: {
+          data: [
+            {
+              row_id: 9001,
+              date: 1715901120,
+              duration: 3480,
+              media_type: "episode",
+              rating_key: 444,
+              grandparent_rating_key: 222,
+              grandparent_title: "For All Mankind",
+              parent_media_index: 2,
+              media_index: 3,
+              year: 2019,
+              friendly_name: "plex-tav",
+              title: "Rules of Engagement",
+            },
+            {
+              row_id: 9002,
+              date: 1715987520,
+              duration: 6120,
+              media_type: "movie",
+              rating_key: 555,
+              full_title: "Arrival",
+              title: "Arrival",
+              year: 2016,
+              friendly_name: "couch",
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await user.click(screen.getByRole("button", { name: /review pasted json/i }));
+
+  expect(await screen.findByRole("heading", { name: /choose shows to import/i })).toBeInTheDocument();
+  await user.click(screen.getByLabelText(/arrival/i));
+  await user.click(screen.getByRole("button", { name: /import selected/i }));
+
+  await waitFor(() => {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    expect(stored.shows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: "For All Mankind" })]),
+    );
+    expect(stored.shows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: "Arrival" })]),
+    );
+  });
 });
 
 it("shows TMDB enrichment controls in settings", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTautulliHistoryUrl,
+  getTautulliImportCandidates,
   mergeTautulliHistory,
   parseUserMap,
 } from "./tautulli.js";
@@ -93,6 +94,44 @@ describe("tautulli import", () => {
           viewer: "together",
           runtimeMinutes: 102,
         }),
+      ]),
+    );
+  });
+
+  it("groups import candidates by show before merging", () => {
+    expect(getTautulliImportCandidates(historyRows)).toEqual([
+      expect.objectContaining({
+        id: "tautulli-movie-555",
+        title: "Arrival",
+        mediaType: "movie",
+        sessionCount: 1,
+      }),
+      expect.objectContaining({
+        id: "tautulli-show-222",
+        title: "For All Mankind",
+        mediaType: "episode",
+        sessionCount: 1,
+      }),
+    ]);
+  });
+
+  it("imports only selected Tautulli shows", () => {
+    const result = mergeTautulliHistory(sampleData, historyRows, {
+      selectedShowIds: ["tautulli-show-222"],
+      userMap: parseUserMap({ maya: "plex-tav", together: "couch" }),
+    });
+
+    expect(result.importedSessions).toBe(1);
+    expect(result.createdShows).toBe(1);
+    expect(result.skippedRows).toBe(0);
+    expect(result.data.shows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "tautulli-show-222", title: "For All Mankind" }),
+      ]),
+    );
+    expect(result.data.shows).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "tautulli-movie-555", title: "Arrival" }),
       ]),
     );
   });
